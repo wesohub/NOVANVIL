@@ -2,6 +2,13 @@
 .workbuddy/
 .wbapp_*.genie
 
+# 本地备份与本地服务器脚本
+backup/
+HTTP服务器.bat
+
+# 备份产物
+backup/
+
 # 系统 / 编辑器
 Thumbs.db
 desktop.ini
