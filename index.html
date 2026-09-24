@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<title>星辰熔炉 · 2D 星球生成引擎</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo"></div>
+      <h1>星辰熔炉<span>NOVANVIL</span></h1>
+    </div>
+    <div class="tools" id="tools">
+      <div class="seedbox">
+        <input type="text" id="seedInput" placeholder="输入种子复现星体…" spellcheck="false">
+        <button id="btnSeed">载入种子</button>
+      </div>
+      <button id="btnReroll" title="保持当前大类（与亚型）不变，重新掷一次纹理">↻ 同型重掷</button>
+      <button class="primary" id="btnGen" title="按当前大类 / 亚型随机生成一颗新星">◈ 随机生成新星</button>
+    </div>
+    <div class="toolright" id="toolright">
+      <button id="btnSave">＋ 存入档案</button>
+      <button id="btnPng">⤓ 导出 PNG</button>
+      <button id="btnHtml" title="导出自包含单文件网页：内嵌当前星体与星空，含预览窗的调整控件，无比例限制">⤓ 导出网页</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="stage">
+      <div class="viewport">
+        <div class="frame">
+          <canvas id="scene" width="1138" height="640"></canvas>
+          <div class="corner c1"></div><div class="corner c2"></div>
+          <div class="corner c3"></div><div class="corner c4"></div>
+          <div class="vp-tag" id="vptag">SCAN // 待机</div>
+          <div class="vp-hint">拖动=光照（相对位移）· 滚轮=缩放 · 双击=暂停</div>
+          <div class="loader" id="loader"><div class="ring"></div><p id="loadtxt">正在合成星体…</p></div>
+        </div>
+        <div class="vpctl">
+          <div class="vpc-group vpc-spin">
+            <button class="vpc-btn" id="btnPause" title="暂停 / 继续">⏸</button>
+          </div>
+          <div class="vpc-group vpc-light">
+            <button class="vpc-btn" id="btnLightReset" title="光照归位（方位 -38° · 仰角 18°）">☉</button>
+          </div>
+          <div class="vpc-rail">
+            <div class="vpc-group vpc-zoom">
+              <b class="vpc-val" id="vZoom">1.00</b>
+              <button class="vpc-btn" id="btnZoomIn" title="放大">＋</button>
+              <button class="vpc-btn" id="btnZoomOut" title="缩小">－</button>
+            </div>
+            <div class="vpc-group vpc-move">
+              <b class="vpc-val" id="vX">0</b>
+              <button class="vpc-btn" id="btnMoveLeft" title="星球左移">◀</button>
+              <button class="vpc-btn" id="btnMoveRight" title="星球右移">▶</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="oprow" id="oprow"></div>
+        <div class="row">
+          <select id="typeSel" title="星体大类"></select>
+          <select id="subSel" title="大类下的细分形态（纹理配方不同）"></select>
+          <div class="seg" id="resBtns" title="画质：纹理 / 球面离屏渲染 / 画布输出三者等比提升 —— 越高越清晰，合成耗时与内存也越高"></div>
+          <select id="ratioSel" title="画面比例（构图）：短边恒为 640，只伸缩长边，星球的视觉大小不变；后面的像素是当前画质下的实际导出尺寸"></select>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div class="tabs" id="tabs">
+        <button data-tab="ov" class="on">概览</button>
+        <button data-tab="ps">参数</button>
+        <button data-tab="ar">档案</button>
+      </div>
+      <div class="tabbody">
+        <div class="tabpane on" data-pane="ov">
+          <div class="card idcard">
+            <div class="typetag" id="typetag"><i class="dot"></i><span>未知</span></div>
+            <div class="pname" id="pname">—</div>
+            <div class="pepi" id="pepi">—</div>
+            <div class="pseed">SEED <b id="pseed" title="点击复制">—</b></div>
+            <div class="pdesc" id="pdesc">点击「随机生成新星」开始探索。</div>
+          </div>
+          <div class="card">
+            <h3>宜居指数</h3>
+            <div class="stats">
+              <div class="st wide">
+                <div class="k">HABITABILITY INDEX</div>
+                <div class="v" id="habV">—</div>
+                <div class="bar"><i id="habBar" style="width:0%;background:var(--fluo)"></i></div>
+              </div>
+              <div class="st wide">
+                <div class="k">HAZARD LEVEL · 危险等级</div>
+                <div class="v" id="hazV">—</div>
+                <div class="bar"><i id="hazBar" style="width:0%;background:#fff"></i></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>星体特征</h3>
+            <div class="chips" id="traits"></div>
+          </div>
+        </div>
+        <div class="tabpane" data-pane="ps">
+          <div class="card">
+            <h3>物理参数</h3>
+            <div class="stats" id="stats"></div>
+          </div>
+        </div>
+        <div class="tabpane" data-pane="ar">
+          <div class="card">
+            <h3>观测档案<span class="cntbadge">已合成 <b id="cnt">0</b> 颗</span><button id="archEdit" type="button" class="arch-edit">✎ 编辑</button></h3>
+            <div class="arch" id="arch"><div class="empty">暂无记录</div></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+<div class="modal" id="expModal">
+  <div class="sheet">
+    <h4>导出单文件网页<span>STANDALONE HTML</span></h4>
+    <div class="mrow">
+      <label>画质</label>
+      <div class="seg" id="expRes"></div>
+    </div>
+    <div class="mrow">
+      <label>贴图编码</label>
+      <div class="seg" id="expEnc"></div>
+    </div>
+    <p class="mtip" id="expTip"></p>
+    <div class="macts">
+      <button id="expCancel">取消</button>
+      <button class="primary" id="expGo">⤓ 导出单文件网页</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

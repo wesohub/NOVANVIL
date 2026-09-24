@@ -1,0 +1,3284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<title>星辰熔炉 · 2D 星球生成引擎</title>
+<style>
+:root{
+  --bg:#000;
+  --panel:#050505;
+  --panel2:#0b0b0b;
+  --line:#202020;
+  --line2:#3a3a3a;
+  --fluo:#3dffd0;
+  --txt:#e8e8e8;
+  --dim:#7c7c7c;
+  --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{
+  background:var(--bg);
+  color:var(--txt);
+  font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:13px;line-height:1.5;
+  overflow:hidden;
+  -webkit-tap-highlight-color:transparent;
+}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:#0a0a0a}
+::-webkit-scrollbar-thumb{background:#2a2a2a}
+::-webkit-scrollbar-thumb:hover{background:#454545}
+
+.app{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px;padding:8px 10px}
+header.topbar{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;min-height:42px;padding:6px 10px;background:var(--panel);border:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:9px;flex:none}
+.logo{width:14px;height:14px;border:2px solid #fff;position:relative;flex:none}
+.logo::after{content:"";position:absolute;inset:2px;background:var(--fluo)}
+h1{font-size:13.5px;letter-spacing:.16em;font-weight:600;white-space:nowrap}
+h1 span{color:var(--fluo);font-size:10px;letter-spacing:.2em;margin-left:7px;font-weight:400}
+.tools{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0;justify-content:flex-end}
+.toolright{display:flex;gap:6px;flex:none;margin-left:6px}
+
+main{display:grid;grid-template-columns:minmax(0,1fr) 410px;gap:8px;min-height:0}
+@media(max-width:1040px){main{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) 240px}}
+
+/* ── 舞台 ── */
+.stage{display:grid;grid-template-rows:minmax(0,1fr) auto;min-height:0;background:var(--panel);border:1px solid var(--line)}
+.viewport{position:relative;min-height:0;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center}
+.frame{position:relative;line-height:0}
+canvas{display:block;touch-action:none;cursor:grab}
+canvas:active{cursor:grabbing}
+.corner{position:absolute;width:16px;height:16px;border:1px solid rgba(255,255,255,.22);pointer-events:none}
+.c1{top:8px;left:8px;border-right:0;border-bottom:0}
+.c2{top:8px;right:8px;border-left:0;border-bottom:0}
+.c3{bottom:8px;left:8px;border-right:0;border-top:0}
+.c4{bottom:8px;right:8px;border-left:0;border-top:0}
+.vp-tag{position:absolute;left:12px;bottom:9px;font-family:var(--mono);font-size:10px;color:rgba(255,255,255,.42);letter-spacing:.14em;pointer-events:none}
+.vp-hint{position:absolute;left:50%;top:9px;transform:translateX(-50%);font-family:var(--mono);font-size:10px;color:rgba(255,255,255,.28);pointer-events:none}
+.loader{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;pointer-events:none;
+  background:rgba(0,0,0,.86);z-index:5;line-height:1.6}
+.loader.on{display:flex}
+.ring{width:34px;height:34px;border:1px solid #262626;border-top-color:var(--fluo);animation:spin2 .8s linear infinite}
+@keyframes spin2{to{transform:rotate(360deg)}}
+.loader p{font-family:var(--mono);font-size:11px;color:var(--fluo);letter-spacing:.14em}
+
+/* ── 控制条 ── */
+.controls{padding:7px 8px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px;background:var(--panel2)}
+.row{display:flex;gap:6px;align-items:center;min-width:0}
+button{
+  font-family:inherit;font-size:11.5px;color:#dcdcdc;background:#0b0b0b;
+  border:1px solid var(--line2);border-radius:0;padding:5px 10px;cursor:pointer;
+  transition:.14s;letter-spacing:.05em;white-space:nowrap}
+button:hover{border-color:#fff;color:#fff;background:#161616}
+button:active{background:#000}
+button.primary{border-color:var(--fluo);color:var(--fluo)}
+button.primary:hover{background:rgba(61,255,208,.12);color:#fff;border-color:var(--fluo)}
+button.on{border-color:#fff;background:#fff;color:#000}
+button:disabled{opacity:.35;cursor:not-allowed}
+
+select,input[type=text]{
+  font-family:var(--mono);font-size:11.5px;color:#fff;background:#000;
+  border:1px solid var(--line2);border-radius:0;height:26px;padding:0 7px;outline:none}
+select:focus,input[type=text]:focus{border-color:var(--fluo)}
+select{flex:1;min-width:0}
+input[type=text]{flex:1.2;min-width:0}
+
+/* ── 信息面板（标签式） ── */
+.panel{display:grid;grid-template-rows:auto minmax(0,1fr);min-height:0;background:var(--panel);border:1px solid var(--line)}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;background:transparent;border:0;border-right:1px solid var(--line);padding:8px 2px;
+  font-size:11px;letter-spacing:.1em;color:var(--dim);font-family:var(--mono)}
+.tabs button:last-child{border-right:0}
+.tabs button:hover{background:#101010;color:#fff;border-color:var(--line)}
+.tabs button.on{color:#fff;background:#0e0e0e;box-shadow:inset 0 -2px 0 var(--fluo)}
+.tabbody{min-height:0;overflow-y:auto;padding:9px;display:flex;flex-direction:column;gap:9px}
+.tabpane{display:none;flex-direction:column;gap:9px}
+.tabpane.on{display:flex}
+
+.card{background:#000;border:1px solid var(--line);padding:11px}
+.card h3{font-size:10px;letter-spacing:.18em;color:var(--dim);font-weight:500;margin-bottom:9px;
+  display:flex;align-items:center;gap:8px;font-family:var(--mono)}
+.card h3::after{content:"";flex:1;height:1px;background:var(--line)}
+.cntbadge{font-family:var(--mono);font-size:9.5px;font-weight:400;letter-spacing:.08em;
+  color:var(--dim);white-space:nowrap}
+.cntbadge b{color:var(--fluo);font-weight:500}
+
+.idcard{border-color:var(--line2)}
+.typetag{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;letter-spacing:.12em;
+  padding:3px 8px;border:1px solid currentColor;margin-bottom:8px}
+.dot{width:6px;height:6px;background:currentColor}
+.pname{font-size:19px;font-weight:700;letter-spacing:.02em;line-height:1.2;color:#fff;word-break:break-word}
+.pepi{font-size:12px;color:var(--fluo);margin-top:3px;letter-spacing:.04em}
+.pseed{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:7px;letter-spacing:.06em}
+.pseed b{color:var(--fluo);font-weight:500;cursor:pointer}
+.pdesc{font-size:11.5px;color:#9c9c9c;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);min-height:34px}
+
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line)}
+.st{background:#000;padding:7px 9px}
+.st .k{font-size:9.5px;color:var(--dim);letter-spacing:.08em;font-family:var(--mono)}
+.st .v{font-size:13px;color:#fff;font-family:var(--mono);font-weight:600;margin-top:1px}
+.st .v small{font-size:9.5px;color:var(--dim);font-weight:400;margin-left:2px}
+.st.wide{grid-column:1/-1}
+
+.bar{height:3px;background:#1c1c1c;margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%;transition:width .5s}
+
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{font-size:10.5px;padding:3px 8px;background:#0a0a0a;border:1px solid #2c2c2c;color:#c8c8c8;letter-spacing:.02em}
+.chip.good{background:#0a0a0a;border-color:rgba(255,255,255,.42);color:#fff}
+.chip.warn{background:rgba(61,255,208,.06);border-color:var(--fluo);color:var(--fluo)}
+.chip.gold{background:#0a0a0a;border-color:#3a3a3a;color:#b4b4b4}
+
+/* ── 档案 ── */
+.arch{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:6px}
+.arc{position:relative;aspect-ratio:1;overflow:hidden;cursor:pointer;background:#000;
+  border:1px solid var(--line);transition:.14s}
+.arc:hover{border-color:var(--fluo);z-index:2}
+.arc img{width:100%;height:100%;display:block;object-fit:cover}
+.arc span{position:absolute;left:0;right:0;bottom:0;font-size:9px;text-align:center;
+  background:rgba(0,0,0,.78);padding:2px;color:#e8e8e8;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono)}
+.empty{color:var(--dim);font-size:11px;text-align:center;padding:14px 0;font-family:var(--mono)}
+
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(16px);opacity:0;
+  background:#000;border:1px solid var(--fluo);color:var(--fluo);
+  padding:7px 16px;font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;
+  transition:.3s;pointer-events:none;z-index:200}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── 预览窗内嵌控件（左上暂停 / 右上光照归位 / 右下缩放）──
+   直接贴在观测窗上，省掉外侧一整条控制行；
+   半透明深底 + 1px 冷灰描边，不抢星体主体的视觉权重 */
+.vpctl{position:absolute;inset:0;pointer-events:none;z-index:4}
+.vpc-group{position:absolute;pointer-events:auto;display:flex;align-items:center;gap:4px}
+/* 左上 / 右上横排；下移到角标之下，不与取景框角标叠压 */
+.vpc-spin{left:10px;top:30px;flex-direction:row}
+.vpc-light{right:10px;top:30px;flex-direction:row}
+.vpc-zoom{right:10px;bottom:10px;flex-direction:row}
+.vpc-val{font-family:var(--mono);font-size:9px;line-height:1;color:rgba(255,255,255,.5);letter-spacing:.04em}
+.vpc-btn{
+  width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:13px;line-height:1;color:#dcdcdc;
+  background:rgba(8,8,8,.74);border:1px solid var(--line2);border-radius:0;
+  cursor:pointer;transition:.14s;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+.vpc-btn:hover{border-color:#fff;color:#fff;background:rgba(22,22,22,.9)}
+.vpc-btn.on{border-color:var(--fluo);color:var(--fluo);background:rgba(61,255,208,.14)}
+
+/* ── 操作按钮条的两套落位 ──
+   桌面：重掷 / 生成 在顶栏中部，存入 / 导出 在顶栏右上角
+   手机：JS 把 .tools（高频两项）搬进 .oprow（预览窗正下方，拇指区），
+        .toolright（低频两项）留在右上角；两项等分一行 */
+.oprow{display:flex}
+.oprow:empty{display:none}
+.oprow .tools{flex:1;min-width:0;flex-wrap:wrap;justify-content:flex-start;gap:6px;
+  overflow:visible;-webkit-mask-image:none;mask-image:none}
+.oprow .tools button{flex:1 1 0}
+
+/* ══════════════════════════════════════════════════════════════════════
+   移动端版式系统
+   ─────────────────────────────────────────────────────────────────────
+   竖屏（≤800px 且 portrait）：三区锁定构图，整屏不滚动
+       ① 状态栏  品牌 + 右上角「存入档案 / 导出 PNG」
+       ② 观测窗  高度 auto —— 严格贴合画布等比结果，不留被动黑边；
+                 窗内左上=暂停，右上=光照归位，右下=缩放加减
+       ③ 控制台  高频操作（同型重掷 / 随机生成）→ 选择器
+       ④ 数据席  吃掉全部剩余高度，内部滚动；合成计数在档案卡片标题行
+   横屏（landscape 且 ≤560px 高）：矮屏双栏，观测窗吃满高度，右侧窄数据席
+   触屏（hover:none / pointer:coarse）：清粘滞 hover、放大触控目标
+   ─────────────────────────────────────────────────────────────────────
+   桌面规则零改动，以下全部为媒体查询内覆盖
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── 触屏：清除点按后残留的 hover 高亮 ── */
+@media (hover:none){
+  button:not(.on):not(.primary):hover{border-color:var(--line2);color:#dcdcdc;background:#0b0b0b}
+  button.primary:not(.on):hover{background:#0b0b0b;color:var(--fluo);border-color:var(--fluo)}
+  .tabs button:not(.on):hover{background:transparent;color:var(--dim);border-color:var(--line)}
+  .arc:hover{border-color:var(--line)}
+}
+/* ── 触屏：触控目标 ≥34px（拇指命中区） ── */
+@media (pointer:coarse){
+  button{padding:7px 11px;min-height:34px;font-size:12px}
+  select,input[type=text]{height:34px;font-size:12px}
+  .tabs button{min-height:44px}
+  .vpc-btn{width:34px;height:34px;min-height:34px}
+}
+
+/* ═══════════ 手机竖屏 ═══════════ */
+@media (max-width:800px) and (orientation:portrait){
+  html,body{height:100vh}
+  html,body{height:100dvh}
+  .app{display:flex;flex-direction:column;gap:0;padding:0}
+
+  /* ① 状态栏：品牌 + 右上角（存入档案 / 导出 PNG），操作按钮已下移到预览窗下方 */
+  header.topbar{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:0;
+    padding:calc(6px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) 6px calc(10px + env(safe-area-inset-left));
+    border:0;border-bottom:1px solid var(--line);
+  }
+  h1{font-size:12.5px}
+  h1 span{display:none}                       /* 副标 STELLAR FORGE 让位 */
+
+  /* ② 观测窗：高度由画布等比结果决定，余量全部下放给数据席 */
+  main{flex:1;display:flex;flex-direction:column;gap:0;min-height:0}
+  .stage{flex:none;grid-template-rows:auto auto;border:0;border-bottom:1px solid var(--line)}
+
+  /* ③ 控制台：操作按钮行 → 选择器，逐级向下 */
+  .controls{padding:8px;gap:7px;border-top:0}
+  .controls .row{flex-wrap:wrap;gap:6px}
+  .controls .row select{flex:1 1 calc(50% - 3px)}
+  .controls .row input[type=text]{flex:1 1 120px}
+  .controls .row button{flex:none}
+  .controls .row #resSel{flex:1 1 100%}       /* 分辨率独占一行：档位文字长，挤进半宽会被截断 */
+
+  /* 视口角标适配窄屏；提示语撤掉（控件已自解释） */
+  .corner{width:11px;height:11px}
+  .c1{top:6px;left:6px}.c2{top:6px;right:6px}.c3{bottom:6px;left:6px}
+  .c4{display:none}                          /* 右下角标让位给缩放控件 */
+  .vp-tag{left:8px;bottom:6px;font-size:9px;letter-spacing:.1em;max-width:62%;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vp-hint{display:none}
+
+  /* ④ 数据席：占满剩余高度，内部滚动，底部留出 Home 条安全区 */
+  .panel{flex:1;min-height:0;border:0;border-top:1px solid var(--line)}
+  .tabs button{padding:10px 2px;font-size:11px}
+  .tabbody{padding:8px;gap:8px;padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+  .card{padding:10px}
+  .pname{font-size:17px}
+  .arch{grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:5px}
+  .toast{bottom:calc(14px + env(safe-area-inset-bottom))}
+}
+
+/* ═══════════ 手机横屏（矮屏） ═══════════ */
+@media (orientation:landscape) and (max-height:560px){
+  html,body{height:100vh}
+  html,body{height:100dvh}
+  .app{display:flex;flex-direction:column;gap:0;padding:0}
+  header.topbar{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:0;
+    padding:4px calc(10px + env(safe-area-inset-right)) 4px calc(10px + env(safe-area-inset-left));
+    border:0;border-bottom:1px solid var(--line);
+  }
+  h1 span{display:none}
+
+  main{flex:1;grid-template-columns:minmax(0,1fr) 252px;grid-template-rows:minmax(0,1fr);gap:0;min-height:0}
+  .stage{border:0;border-right:1px solid var(--line)}
+  .panel{border:0}
+  /* 矮屏下按钮条压成单行横滑，不额外吃掉观测窗高度 */
+  .oprow .tools{flex-wrap:nowrap;gap:5px;overflow-x:auto;overflow-y:hidden;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .oprow .tools::-webkit-scrollbar{display:none}
+  .oprow .tools button{flex:none}
+  .controls{padding:5px 6px;gap:5px}
+  .controls .row{gap:5px}
+  .tabbody{padding:7px;gap:7px;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  .card{padding:8px}
+  .pname{font-size:16px}
+  .arch{grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:4px}
+  .c4{display:none}
+  .vp-hint{display:none}
+  .vp-tag{font-size:9px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo"></div>
+      <h1>星辰熔炉<span>STELLAR FORGE</span></h1>
+    </div>
+    <div class="tools" id="tools">
+      <button id="btnReroll" title="保持当前大类（与亚型）不变，重新掷一次纹理">↻ 同型重掷</button>
+      <button class="primary" id="btnGen" title="按当前大类 / 亚型随机生成一颗新星">◈ 随机生成新星</button>
+    </div>
+    <div class="toolright" id="toolright">
+      <button id="btnSave">＋ 存入档案</button>
+      <button id="btnPng">⤓ 导出 PNG</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="stage">
+      <div class="viewport">
+        <div class="frame">
+          <canvas id="scene" width="900" height="640"></canvas>
+          <div class="corner c1"></div><div class="corner c2"></div>
+          <div class="corner c3"></div><div class="corner c4"></div>
+          <div class="vp-tag" id="vptag">SCAN // 待机</div>
+          <div class="vp-hint">拖动=光照（相对位移）· 滚轮=缩放 · 双击=暂停</div>
+          <div class="loader" id="loader"><div class="ring"></div><p id="loadtxt">正在合成星体…</p></div>
+        </div>
+        <div class="vpctl">
+          <div class="vpc-group vpc-spin">
+            <button class="vpc-btn" id="btnPause" title="暂停 / 继续">⏸</button>
+          </div>
+          <div class="vpc-group vpc-light">
+            <button class="vpc-btn" id="btnLightReset" title="光照归位（方位 -38° · 仰角 18°）">☉</button>
+          </div>
+          <div class="vpc-group vpc-zoom">
+            <b class="vpc-val" id="vZoom">1.00</b>
+            <button class="vpc-btn" id="btnZoomIn" title="放大">＋</button>
+            <button class="vpc-btn" id="btnZoomOut" title="缩小">－</button>
+          </div>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="oprow" id="oprow"></div>
+        <div class="row">
+          <select id="typeSel" title="星体大类"></select>
+          <select id="subSel" title="大类下的细分形态（纹理配方不同）"></select>
+          <input type="text" id="seedInput" placeholder="输入种子复现星体…" spellcheck="false">
+          <button id="btnSeed">载入种子</button>
+          <select id="resSel" title="星球分辨率：纹理 / 球面离屏渲染 / 画布输出三者等比提升 —— 越高越清晰，合成耗时与内存也越高"></select>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div class="tabs" id="tabs">
+        <button data-tab="ov" class="on">概览</button>
+        <button data-tab="ps">参数</button>
+        <button data-tab="ar">档案</button>
+      </div>
+      <div class="tabbody">
+        <div class="tabpane on" data-pane="ov">
+          <div class="card idcard">
+            <div class="typetag" id="typetag"><i class="dot"></i><span>未知</span></div>
+            <div class="pname" id="pname">—</div>
+            <div class="pepi" id="pepi">—</div>
+            <div class="pseed">SEED <b id="pseed" title="点击复制">—</b></div>
+            <div class="pdesc" id="pdesc">点击「随机生成新星」开始探索。</div>
+          </div>
+          <div class="card">
+            <h3>宜居指数</h3>
+            <div class="stats">
+              <div class="st wide">
+                <div class="k">HABITABILITY INDEX</div>
+                <div class="v" id="habV">—</div>
+                <div class="bar"><i id="habBar" style="width:0%;background:var(--fluo)"></i></div>
+              </div>
+              <div class="st wide">
+                <div class="k">HAZARD LEVEL · 危险等级</div>
+                <div class="v" id="hazV">—</div>
+                <div class="bar"><i id="hazBar" style="width:0%;background:#fff"></i></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>星体特征</h3>
+            <div class="chips" id="traits"></div>
+          </div>
+        </div>
+        <div class="tabpane" data-pane="ps">
+          <div class="card">
+            <h3>物理参数</h3>
+            <div class="stats" id="stats"></div>
+          </div>
+        </div>
+        <div class="tabpane" data-pane="ar">
+          <div class="card">
+            <h3>观测档案<span class="cntbadge">已合成 <b id="cnt">0</b> 颗</span></h3>
+            <div class="arch" id="arch"><div class="empty">暂无记录</div></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   星辰熔炉 —— 程序化 2D 星球生成引擎
+   流程：球面 3D 噪声 → 等距柱状纹理(1024×512) → 正交投影反解经纬度
+        → 经度加旋转相位采样（纹理在圆内横向流动＝自转错觉）
+        → WebGL2 片元着色器逐像素光照(与旋转无关，瞬时叠加) → 大气辉光 / 星空合成
+   ===================================================================== */
+
+/* ───────── 伪随机 ───────── */
+function xmur3(str){
+  let h=1779033703^str.length;
+  for(let i=0;i<str.length;i++){
+    h=Math.imul(h^str.charCodeAt(i),3432918353);
+    h=h<<13|h>>>19;
+  }
+  return function(){
+    h=Math.imul(h^h>>>16,2246822507);
+    h=Math.imul(h^h>>>13,3266489909);
+    return (h^=h>>>16)>>>0;
+  };
+}
+function mulberry32(a){
+  return function(){
+    a|=0;a=a+0x6D2B79F5|0;
+    let t=Math.imul(a^a>>>15,1|a);
+    t=t+Math.imul(t^t>>>7,61|t)^t;
+    return ((t^t>>>14)>>>0)/4294967296;
+  };
+}
+function makeRng(seedStr){
+  const s=xmur3(String(seedStr));
+  return mulberry32(s());
+}
+const rnd=(r,a,b)=>a+r()*(b-a);
+const rint=(r,a,b)=>Math.floor(a+r()*(b-a+1));
+const pick=(r,arr)=>arr[Math.floor(r()*arr.length)];
+const chance=(r,p)=>r()<p;
+function pickMany(r,arr,n){
+  const c=arr.slice(),o=[];
+  while(o.length<n&&c.length)o.push(c.splice(Math.floor(r()*c.length),1)[0]);
+  return o;
+}
+
+/* ───────── 数学 ───────── */
+const TAU=Math.PI*2, PI=Math.PI;
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const clamp01=v=>v<0?0:v>1?1:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+function smoothstep(a,b,x){ x=clamp01((x-a)/(b-a)); return x*x*(3-2*x); }
+
+/* ───────── 3D Perlin 噪声（球面采样无缝） ───────── */
+function makeNoise3D(rand){
+  const perm=new Uint8Array(256);
+  for(let i=0;i<256;i++)perm[i]=i;
+  for(let i=255;i>0;i--){const j=Math.floor(rand()*(i+1));const t=perm[i];perm[i]=perm[j];perm[j]=t;}
+  const p=new Uint8Array(512);
+  for(let i=0;i<512;i++)p[i]=perm[i&255];
+  const fade=t=>t*t*t*(t*(t*6-15)+10);
+  const L=(t,a,b)=>a+(b-a)*t;
+  function grad(h,x,y,z){
+    switch(h&15){
+      case 0:return x+y;case 1:return -x+y;case 2:return x-y;case 3:return -x-y;
+      case 4:return x+z;case 5:return -x+z;case 6:return x-z;case 7:return -x-z;
+      case 8:return y+z;case 9:return -y+z;case 10:return y-z;case 11:return -y-z;
+      case 12:return x+y;case 13:return -y+z;case 14:return x-y;default:return -y-z;
+    }
+  }
+  return function(x,y,z){
+    const X=Math.floor(x)&255,Y=Math.floor(y)&255,Z=Math.floor(z)&255;
+    const fx=x-Math.floor(x),fy=y-Math.floor(y),fz=z-Math.floor(z);
+    const u=fade(fx),v=fade(fy),w=fade(fz);
+    const A=p[X]+Y,AA=p[A]+Z,AB=p[A+1]+Z;
+    const B=p[X+1]+Y,BA=p[B]+Z,BB=p[B+1]+Z;
+    return L(w,
+      L(v,L(u,grad(p[AA],fx,fy,fz),grad(p[BA],fx-1,fy,fz)),
+              L(u,grad(p[AB],fx,fy-1,fz),grad(p[BB],fx-1,fy-1,fz))),
+      L(v,L(u,grad(p[AA+1],fx,fy,fz-1),grad(p[BA+1],fx-1,fy,fz-1)),
+              L(u,grad(p[AB+1],fx,fy-1,fz-1),grad(p[BB+1],fx-1,fy-1,fz-1))));
+  };
+}
+
+/* 分形叠加（lac/gain/oct 的缺省值由噪声函数自带的随机谱决定） */
+function fbm(n,x,y,z,oct,lac,gain){
+  oct=(oct||5)+(n.octBias||0);oct=oct<2?2:(oct>9?9:oct);
+  lac=lac||n.lac||2.0;gain=gain===undefined?(n.gain===undefined?0.5:n.gain):gain;
+  let a=1,f=1,s=0,nm=0;
+  for(let i=0;i<oct;i++){s+=a*n(x*f,y*f,z*f);nm+=a;a*=gain;f*=lac;}
+  // tanh 软限幅：输出严格落在 (-1,1)，于是 *0.5+0.5 与「权重和=1」的加权和
+  // 都不再越界 → 幅度上调时表现为层次压缩，而不是被 ramp 截成整片端点色。
+  // 典型幅值（|v|≤0.5）变化 <8%，只有极值区被压。
+  return Math.tanh(s/nm*1.75);
+}
+/* 脊状噪声：山脉 / 裂缝 / 能量流 */
+function ridged(n,x,y,z,oct,lac,gain){
+  oct=(oct||5)+(n.octBias||0);oct=oct<2?2:(oct>9?9:oct);
+  lac=lac||n.lac||2.0;gain=gain===undefined?(n.gain===undefined?0.5:n.gain):gain;
+  let a=1,f=1,s=0,nm=0;
+  for(let i=0;i<oct;i++){
+    const v=1-Math.abs(n(x*f,y*f,z*f));
+    s+=a*v*v;nm+=a;a*=gain;f*=lac;
+  }
+  return s/nm;
+}
+/* 湍流：域扭曲后的 fbm，用于气态条带 */
+function turb(n,x,y,z,oct){
+  const q=fbm(n,x+11.3,y+4.7,z+2.1,3);
+  const w=fbm(n,x*1.7+q,y*1.7+q*0.6,z*1.7,3);
+  return fbm(n,x+w*0.9,y+w*0.9,z+w*0.9,oct||4);
+}
+
+/* ───────── 极地冰盖 ─────────
+   真实冰盖 = 蜿蜒冰缘 + 海冰破碎 / 陆冰连续 + 冰面穹顶起伏
+   ① 冰缘：纬度线被低频噪声推移，边缘呈锯齿 / 岬湾状，非均匀圆环
+   ② 海冰：外缘碎成浮冰与水道，越靠极点越连片；陆冰连续且雪线更低
+   ③ 冰面：低频起伏输出到 out[0]，供调用处做明暗（穹顶高光 / 冰纹）
+   edge：冰盖起始纬度(|sin lat|)  warp：冰缘扰动幅度  pha：随机相位  isSea：该点是否海域
+   返回 0-1 覆盖强度；非极区像素提前返回，不付噪声开销 */
+function iceCap(n,nx,ny,nz,latf,edge,warp,pha,isSea,out){
+  if(latf<edge-warp-0.10){out[0]=0.5;return 0;}
+  const wv=fbm(n,nx*1.5+pha,ny*0.9,nz*1.5,4);      // 大尺度冰缘扭曲
+  const fv=fbm(n,nx*6.5+pha*2,ny*6.5+7,nz*6.5,3);  // 高频碎冰
+  const e=edge-clamp(wv,-1,1)*warp;
+  let t=smoothstep(e,e+0.10,latf);
+  if(isSea){
+    const frag=smoothstep(0.34,0.60,fv*0.5+0.5);   // 浮冰块
+    const solid=smoothstep(e+0.12,e+0.32,latf);    // 近极点连片
+    t*=frag+(1-frag)*solid;
+  }
+  out[0]=wv*0.5+0.5;
+  return clamp01(t);
+}
+
+/* ───────── 3D Worley（细胞噪声）：陨石坑 / 晶面 / 米粒组织 ───────── */
+function makeWorley3D(rand){
+  const mk=()=>{const a=new Uint8Array(256);for(let i=0;i<256;i++)a[i]=i;
+    for(let i=255;i>0;i--){const j=Math.floor(rand()*(i+1));const t=a[i];a[i]=a[j];a[j]=t;}return a;};
+  const A=mk(),B=mk(),C=mk(),D=mk();
+  return function(x,y,z,out){
+    const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z);
+    let f1=1e9,f2=1e9,id=0;
+    for(let dz=-1;dz<=1;dz++){
+      const cz=zi+dz,czk=C[cz&255];
+      for(let dy=-1;dy<=1;dy++){
+        const cy=yi+dy,cq=B[cy&255];
+        for(let dx=-1;dx<=1;dx++){
+          const cx=xi+dx;
+          const h=(A[cx&255]+cq+czk)&255;
+          const px=cx+A[h]/255,py=cy+B[h]/255,pz=cz+C[h]/255;
+          const ex=px-x,ey=py-y,ez=pz-z;
+          const d=ex*ex+ey*ey+ez*ez;
+          if(d<f1){f2=f1;f1=d;id=D[h]/255;}
+          else if(d<f2){f2=d;}
+        }
+      }
+    }
+    out[0]=Math.sqrt(f1);out[1]=Math.sqrt(f2);out[2]=id;
+  };
+}
+
+/* ───────── 随机域旋转 ─────────
+   同一套噪声的统计形态是固定的，光靠平移常量（+cf / +31 / +70 …）换不出
+   真正不同的地形走向。给每颗星球一个随机正交矩阵，先把采样坐标旋转再喂给
+   噪声 → 大陆走向、山脉方位、细胞排布全变，代价 9 次乘加。
+   顺带把分形参数挂在噪声函数上（lacunarity / gain / 倍频偏移），
+   fbm / ridged 未显式传参时回落到这组值 → 每颗星球的粗糙度谱也不同 */
+function randRot(rand){
+  const a=rand()*TAU,b=Math.acos(rand()*2-1),g=rand()*TAU;
+  const sa=Math.sin(a),ca=Math.cos(a),sb=Math.sin(b),cb=Math.cos(b),sg=Math.sin(g),cg=Math.cos(g);
+  return [cg*ca-sg*cb*sa, -cg*sa-sg*cb*ca, sg*sb,
+          sg*ca+cg*cb*sa, -sg*sa+cg*cb*ca, -cg*sb,
+          sb*sa, sb*ca, cb];
+}
+function rotNoise(fn,rand){
+  const m=randRot(rand);
+  /* 每种子地形疏密：各轴独立频率缩放 0.78-1.28 —— 同亚型不同种子的
+     地貌骨架（大陆块数、岛链间距、沙丘密度）被整体拉伸/压缩，y 轴
+     独立缩放使经向/纬向特征密度可以不对称 */
+  const kx=0.78+rand()*0.50,ky=0.78+rand()*0.50,kz=0.78+rand()*0.50;
+  const o=function(x,y,z){
+    return fn(m[0]*x*kx+m[1]*y*ky+m[2]*z*kz,
+              m[3]*x*kx+m[4]*y*ky+m[5]*z*kz,
+              m[6]*x*kx+m[7]*y*ky+m[8]*z*kz);
+  };
+  o.lac=1.70+rand()*0.70;
+  o.gain=0.42+rand()*0.20;
+  const ob=rand();
+  o.octBias=ob<0.34?-1:(ob<0.67?0:1);
+  return o;
+}
+function rotWorley(fn,rand){
+  const m=randRot(rand);
+  /* 与 rotNoise 同理：Worley 细胞（海峡网 / 陨击坑阵列 / 龟裂）也随
+     种子做各轴独立缩放，细胞密度每颗星球不同 */
+  const kx=0.78+rand()*0.50,ky=0.78+rand()*0.50,kz=0.78+rand()*0.50;
+  return function(x,y,z,out){
+    return fn(m[0]*x*kx+m[1]*y*ky+m[2]*z*kz,
+              m[3]*x*kx+m[4]*y*ky+m[5]*z*kz,
+              m[6]*x*kx+m[7]*y*ky+m[8]*z*kz, out);
+  };
+}
+
+/* ───────── 调色板 ───────── */
+function hsl2rgb(h,s,l){
+  // 兼容两种写法：0-1 小数 与 0-100 百分比。
+  // （旧代码里大气色 / 辉光色都写成 72、64 这类百分比，
+  //   被 clamp01 直接截成 1 → l=1 时 c=0，所有颜色都变成纯白）
+  if(s>1)s/=100;
+  if(l>1)l/=100;
+  h=((h%360)+360)%360;s=clamp01(s);l=clamp01(l);
+  const c=(1-Math.abs(2*l-1))*s,hp=h/60,x=c*(1-Math.abs(hp%2-1));
+  let r=0,g=0,b=0;
+  if(hp<1){r=c;g=x;}else if(hp<2){r=x;g=c;}else if(hp<3){g=c;b=x;}
+  else if(hp<4){g=x;b=c;}else if(hp<5){r=x;b=c;}else{r=c;b=x;}
+  const m=l-c/2;
+  return [Math.round((r+m)*255),Math.round((g+m)*255),Math.round((b+m)*255)];
+}
+function mixc(a,b,t,o){
+  o[0]=a[0]+(b[0]-a[0])*t;o[1]=a[1]+(b[1]-a[1])*t;o[2]=a[2]+(b[2]-a[2])*t;return o;
+}
+
+/* 用 HSL 定义便于随机色相偏移 */
+function Pal(list,shift,sat,lum){
+  shift=shift||0;sat=sat===undefined?1:sat;lum=lum===undefined?1:lum;
+  return list.map(c=>{
+    // 色域约束：亮度封顶 0.94 —— 再高 hsl2rgb 会把 l 夹成 1，颜色退化成
+    // 纯白、丢掉色相（随机上调明度时最容易踩）。对现有色板（lum ≤ 94）幂等。
+    let l=c[2]/100*lum;
+    if(l>0.94)l=0.94;else if(l<0)l=0;
+    return hsl2rgb(c[0]+shift,clamp01(c[1]/100*sat),l);
+  });
+}
+
+/* ───────── 风暴（气态行星涡旋） ───────── */
+function makeStorms(rand,n,latRange){
+  const st=[];
+  const count=n;
+  for(let i=0;i<count;i++){
+    st.push({
+      lon:rand()*TAU,
+      lat:rnd(rand,-latRange,latRange),
+      r:rnd(rand,0.12,0.42),
+      swirl:rnd(rand,1.2,4.2)*(rand()<0.5?-1:1),
+      big:rand()<0.34
+    });
+  }
+  return st;
+}
+/* 对经纬度做漩涡扭曲，返回命中强度 */
+function applyStorms(storms,lon,lat,G){
+  let hit=0,hid=0,olon=lon,olat=lat;
+  for(let i=0;i<storms.length;i++){
+    const s=storms[i];
+    let dlon=olon-s.lon;
+    while(dlon>PI)dlon-=TAU; while(dlon<-PI)dlon+=TAU;
+    const dlat=olat-s.lat;
+    const d2=dlon*dlon+dlat*dlat;
+    if(d2<s.r*s.r){
+      const d=Math.sqrt(d2)/s.r;
+      const w=(1-d)*(1-d);
+      const ang=w*s.swirl;
+      const cs=Math.cos(ang),sn=Math.sin(ang);
+      olon=s.lon+dlon*cs-dlat*sn;
+      olat=s.lat+dlon*sn+dlat*cs;
+      if(w>hit){hit=w;hid=i;}
+    }
+  }
+  G.lon=olon;G.lat=olat;G.storm=hit;G.stormId=hid;
+  return hit;
+}
+
+/* ───────── 纹理分辨率 ───────── */
+/* 随「星球分辨率」档位等比缩放（见 RES_STEPS / setResolution），默认 1024×512 */
+let TW=1024,TH=512;
+
+/* out: [r,g,b,emissive,specular,cloud]  0-255 */
+function buildRows(cfg,py0,py1,alb,em,spec,cld){
+  const n=cfg.noise,w=cfg.worley,gen=cfg.gen;
+  const o=cfg._o;
+  const cosT=cfg._cosT,sinT=cfg._sinT;
+  for(let py=py0;py<py1;py++){
+    const v=(py+0.5)/TH;
+    const lat=(0.5-v)*PI;
+    const ny=Math.sin(lat),rc=Math.cos(lat);
+    let rowOff=py*TW;
+    for(let px=0;px<TW;px++){
+      const u=(px+0.5)/TW;
+      const lon=u*TAU;
+      const G=cfg._G;
+      G.nx=cosT[px]*rc;G.ny=ny;G.nz=sinT[px]*rc;
+      G.lat=lat;G.lon=lon;G.u=u;G.v=v;G.storm=0;G.stormId=0;
+      gen(cfg,G,o);
+      const i3=(rowOff+px)*3,i1=rowOff+px;
+      // 钳制后再写入，避免 Uint8Array 溢出回绕产生亮斑噪点
+      const r=o[0],g=o[1],b=o[2];
+      alb[i3]=r<0?0:(r>255?255:r);
+      alb[i3+1]=g<0?0:(g>255?255:g);
+      alb[i3+2]=b<0?0:(b>255?255:b);
+      // 同上：这两路没有 albedo 那样的钳制，超 255 会按 256 回绕出黑斑/逆色
+      em[i1]=o[3]<0?0:(o[3]>255?255:o[3]);
+      spec[i1]=o[4]<0?0:(o[4]>255?255:o[4]);
+      // 云层降占比：1.5 次幂压缩，抬高可见阈值 → 覆盖面积略缩、整体微淡
+      // （cv>255 时 sqrt 项从压缩转为放大，必须先钳制再写）
+      const cv=o[5],cw=cv>0?cv*Math.sqrt(cv/255):0;
+      cld[i1]=cw<0?0:(cw>255?255:cw);
+    }
+  }
+}
+function buildTextureAsync(cfg,onProg){
+  return new Promise(resolve=>{
+    const alb=new Uint8Array(TW*TH*3),em=new Uint8Array(TW*TH),
+          spec=new Uint8Array(TW*TH),cld=new Uint8Array(TW*TH);
+    const step=16;
+    let py=0;
+    function chunk(){
+      const e=Math.min(TH,py+step);
+      buildRows(cfg,py,e,alb,em,spec,cld);
+      py=e;
+      if(onProg)onProg(py/TH);
+      if(py<TH) setTimeout(chunk,0);
+      else resolve({alb,em,spec,cld,w:TW,h:TH});
+    }
+    chunk();
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   星球形态库：每种形态 = 配色方案 + 噪声配方 + 特征开关
+   ═══════════════════════════════════════════════════════════════ */
+function ramp(pal,t,o){
+  t=clamp01(t)*(pal.length-1);
+  const i=Math.min(pal.length-2,Math.floor(t));
+  return mixc(pal[i],pal[i+1],t-i,o);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   形态细分调度器
+   每个大类 = 若干「亚型 SUB」；亚型之间的差异体现在
+   ① 噪声配方（fbm / ridged / worley / 条带 的搭配与频率）
+   ② 结构骨架（板块 / 网格 / 环带 / 细胞 / 裂隙 …）
+   ③ 调色板与色相区间
+   因此同大类反复重掷也会得到形态明显不同的星体。
+   ═══════════════════════════════════════════════════════════════ */
+function pickSub(rand,subs){
+  let tot=0;for(let i=0;i<subs.length;i++)tot+=(subs[i].w||1);
+  let r=rand()*tot;
+  for(let i=0;i<subs.length;i++){r-=(subs[i].w||1);if(r<=0)return i;}
+  return subs.length-1;
+}
+function initSub(bm,rand,cfg,idx){
+  const subs=bm.subs;
+  if(idx==null||!(idx>=0)||idx>=subs.length)idx=pickSub(rand,subs);
+  const sv=subs[idx];
+  cfg.subIndex=idx;cfg.subName=sv.name;cfg.sub=sv;
+  /* 配色走独立 rng（不占用主 rand），并在三个维度同时随机：
+     色相区间整体放大 1.0-1.6 倍 / 饱和度 ± / 明度 ±。
+     明度经 Pal() 的色域约束封顶，不会把亮色推成纯白 */
+  const pr=cfg._prand||rand;
+  const hs=(sv.hs===undefined?14:sv.hs)*(1+pr()*0.6);
+  const hShift=rnd(pr,-hs,hs);
+  /* 双段偏移（30%）：色卡前半 / 后半做相反方向色相偏移 → 部分种子出
+     异星配色；保留 35% 残余公共偏移保证整盘色相仍随种子移动 */
+  let pal=sv.pal,pShift=hShift;
+  if(pr()<0.30){
+    const half=Math.ceil(sv.pal.length/2);
+    pal=sv.pal.map((c,i)=>[c[0]+(i<half?0.55:-0.45)*hShift,c[1],c[2]]);
+    pShift=hShift*0.35;
+  }
+  /* 饱和度极化：14% 荧光高饱和 / 25% 灰调低饱和（Pal 内 clamp01 兜底） */
+  let satK=(1+rnd(pr,-0.18,0.22))*(sv.sat||1);
+  const pol=pr();
+  if(pol<0.14)satK*=1.45;else if(pol<0.25)satK*=0.55;
+  const p=Pal(pal,pShift,satK,
+              (1+rnd(pr,-0.12,0.12))*(sv.lum||1));
+  const ak=(sv.atk===undefined?0.5:sv.atk);
+  /* 大气：色相偏移带 30% 反向概率 → 与地表形成冷暖对比；
+     饱和度 / 亮度小幅扰动，亮度封顶 94 防退化纯白 */
+  const aFlip=pr()<0.3?-1:1;
+  let asat=sv.at[1]*(1+rnd(pr,-0.15,0.15));
+  let alum=sv.at[2]*(1+rnd(pr,-0.10,0.10));
+  if(asat<0)asat=0;else if(asat>100)asat=100;
+  if(alum<0)alum=0;else if(alum>94)alum=94;
+  cfg.atmos={col:hsl2rgb(sv.at[0]+hShift*ak*aFlip,asat,alum),
+             str:rnd(pr,sv.ats[0],sv.ats[1])};
+  cfg.ambient=(sv.amb===undefined?0.1:sv.amb);
+  cfg.limb=(sv.limb===undefined?0.2:sv.limb);
+  cfg.hasCloud=sv.cloudP?chance(rand,sv.cloudP*0.75):false;
+  cfg.cloudMul=sv.cloudMul||1;
+  cfg.traits.push(sv.name);
+  if(sv.traits)for(let i=0;i<sv.traits.length;i++)cfg.traits.push(sv.traits[i]);
+  cfg.gen=sv.build(rand,cfg,p);
+}
+
+const BIOMES={
+
+/* ── 1. 类地生机行星 ───────────────────────────── */
+terran:{
+  name:"类地生机行星",en:"TERRAN",color:"#6fe36f",weight:12,
+  meta:{dia:[8600,16800],dens:[0.85,1.25],temp:[-38,42],rot:[9,52],orb:[180,560],
+    atmos:["氮-氧大气（可呼吸）","氮-氧-氩混合","富氧大气（含微量甲烷）","氮氧+高湿度"],
+    res:["稀有金属","液态水","稀土矿脉","生物质","贵金属","硅酸盐"],hab:78},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"大陆型",w:4,hs:16,
+   pal:[[212,76,11],[96,40,32],[64,38,26],[38,42,46],[220,14,93],[198,44,60],[30,16,40]],
+   at:[206,72,64],ats:[0.5,0.75],amb:0.07,limb:0.18,cloudP:1,cloudMul:1.18,
+   traits:["液态水海洋","板块活动活跃"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const sea=rnd(rand,0.44,0.56),iceLat=rnd(rand,0.64,0.86),cov=rnd(rand,0.3,0.7);
+     const ic=cfg._ice;
+     if(sea<0.5)cfg.traits.push("广袤浅海");
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const wx=fbm(n,nx*2.1+cf,ny*2.1,nz*2.1,3),wz=fbm(n,nx*2.1+5,ny*2.1+3,nz*2.1+cf,3);
+       let h=fbm(n,nx*2.0+wx*0.42,ny*2.0,nz*2.0+wz*0.42,6)*0.5+0.5;
+       const cont=fbm(n,nx*0.85+31,ny*0.85,nz*0.85,3)*0.5+0.5;
+       h=h*0.68+cont*0.32;
+       const latf=Math.abs(ny);let sp=0;
+       if(h<sea){
+         const t=smoothstep(sea-0.17,sea,h);
+         mixc(p[0],p[5],t*0.1,tmp);sp=255*(1-t*0.5);
+       }else{
+         const t=(h-sea)/(1-sea);
+         mixc(p[1],p[2],smoothstep(0.02,0.34,t),tmp);
+         const dryN=fbm(n,nx*3+70,ny*3,nz*3,3)*0.5+0.5;
+         const dry=smoothstep(0.2,0.44,latf)*(1-smoothstep(0.5,0.72,latf));
+         mixc(tmp,p[3],clamp01(dry*smoothstep(0.35,0.62,dryN)*1.5),tmp);
+         mixc(tmp,p[6],smoothstep(0.42,0.7,t),tmp);
+         const rock=fbm(n,nx*7+13,ny*7,nz*7,4)*0.5;
+         tmp[0]*=1+rock*0.22;tmp[1]*=1+rock*0.22;tmp[2]*=1+rock*0.22;
+         mixc(tmp,p[4],smoothstep(0.5,0.72,t+latf*0.55),tmp);
+       }
+       const seaIce=h<sea;
+       const icv=iceCap(n,nx,ny,nz,latf,seaIce?iceLat+0.05:iceLat-0.04,0.12,cf,seaIce,ic);
+       if(icv>0){
+         mixc(tmp,p[4],icv,tmp);
+         const k=1+(ic[0]-0.5)*0.20*icv;   // 冰面穹顶起伏
+         tmp[0]*=k;tmp[1]*=k;tmp[2]*=k;
+       }
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=sp;
+       const cl=fbm(n,nx*2.7+90,ny*2.7,nz*2.7,5)*0.5+0.5;
+       const band=0.55+0.45*Math.cos(G.lat*5.4);
+       o[5]=smoothstep(0.46,0.66,cl)*cov*band*255;
+     };
+   }},
+  {name:"群岛型",w:3,hs:14,
+   pal:[[196,86,9],[188,58,28],[172,48,50],[58,44,40],[46,38,54],[204,24,86],[38,30,34]],
+   at:[192,70,66],ats:[0.55,0.85],amb:0.08,limb:0.2,cloudP:1,cloudMul:1.28,
+   traits:["破碎岛链","广阔浅海大陆架"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const sea=rnd(rand,0.56,0.66),cov=rnd(rand,0.5,0.85);
+     const arcF=rnd(rand,1.5,2.3),arcW=rnd(rand,0.18,0.30);
+     const brk=rnd(rand,4.5,7.5),brkD=rnd(rand,0.14,0.24);
+     const ic=cfg._ice;
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       /* ① 地形骨架：域扭曲 fbm + 低频板块，与大陆型同源 → 海岸线蜿蜒不规则 */
+       const wx=fbm(n,nx*2.3+cf,ny*2.3,nz*2.3,3),wz=fbm(n,nx*2.3+9,ny*2.3+2,nz*2.3+cf,3);
+       let h=fbm(n,nx*2.3+wx*0.55,ny*2.3,nz*2.3+wz*0.55,6)*0.5+0.5;
+       const cont=fbm(n,nx*0.85+31,ny*0.85,nz*0.85,3)*0.5+0.5;
+       h=h*0.70+cont*0.30;
+       /* ② 岛弧带：脊状噪声在陆核上抬升 → 沿脊线蜿蜒的长条岛链 */
+       const belt=ridged(n,nx*arcF+cf*0.5,ny*arcF*1.9+7,nz*arcF,4,2.0,0.55);
+       h+=smoothstep(0.52,0.88,belt)*smoothstep(0.40,0.68,cont)*arcW;
+       /* ③ 破碎：Worley 细胞边界成网状海峡（再经域扭曲去掉直线感），高频脊切一道 → 陆块裂成小岛 */
+       w(nx*brk+cf+wx*0.55,ny*brk*1.35,nz*brk+wz*0.55,wo);
+       const inner=smoothstep(0.0,0.30,wo[1]-wo[0]);
+       h-=(1-inner)*brkD;
+       h-=smoothstep(0.42,0.90,ridged(n,nx*brk*2.7+wx+5,ny*brk*2.7,nz*brk*2.7+wz,3,2.0,0.5))*brkD*0.5;
+       const land=h;
+       let sp=0;
+       if(land<sea){
+         const t=smoothstep(sea-0.20,sea,land);
+         mixc(p[0],p[2],t*0.1,tmp);
+         const reef=fbm(n,nx*11+45,ny*11,nz*11,3)*0.5+0.5;
+         mixc(tmp,p[5],smoothstep(0.62,1,t)*0.1*smoothstep(0.5,0.78,reef),tmp);
+         sp=255*(1-t*0.35);
+       }else{
+         const t=clamp01((land-sea)/(1-sea));
+         mixc(p[3],p[4],smoothstep(0.04,0.5,t),tmp);
+         mixc(tmp,p[6],smoothstep(0.55,0.9,t),tmp);
+         const rg=fbm(n,nx*9+7,ny*9,nz*9,3)*0.5;
+         tmp[0]*=1+rg*0.3;tmp[1]*=1+rg*0.3;tmp[2]*=1+rg*0.3;
+         sp=34;
+       }
+       const seaIce=land<sea;
+       const icv=iceCap(n,nx,ny,nz,Math.abs(ny),seaIce?0.76:0.64,0.12,cf,seaIce,ic);
+       if(icv>0){
+         mixc(tmp,p[5],icv,tmp);
+         const k=1+(ic[0]-0.5)*0.20*icv;
+         tmp[0]*=k;tmp[1]*=k;tmp[2]*=k;
+       }
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=sp;
+       const cl=fbm(n,nx*3.1+21,ny*3.1,nz*3.1,4)*0.5+0.5;
+       o[5]=smoothstep(0.48,0.7,cl)*cov*255;
+     };
+   }},
+  {name:"苔原型",w:3,hs:18,
+   pal:[[206,58,14],[188,30,34],[52,26,36],[40,22,48],[210,16,84],[26,18,28],[150,14,52]],
+   at:[200,52,70],ats:[0.4,0.7],amb:0.09,limb:0.22,cloudP:0.75,cloudMul:1.1,
+   traits:["永久冻土带","低矮苔原植被"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const sea=rnd(rand,0.36,0.48),ps=rnd(rand,4,8),cov=rnd(rand,0.35,0.7);
+     const ic=cfg._ice;
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const latf=Math.abs(ny);
+       /* ① 地形骨架：域扭曲 fbm + 低频板块，与大陆型同源 → 有机海岸线 */
+       const wx=fbm(n,nx*2.6+cf,ny*2.6,nz*2.6,3),wz=fbm(n,nx*2.6+9,ny*2.6+4,nz*2.6+cf,3);
+       let h=fbm(n,nx*2.4+wx*0.6,ny*2.4,nz*2.4+wz*0.6,6)*0.5+0.5;
+       const cont=fbm(n,nx*1.1+31,ny*1.1,nz*1.1,3)*0.5+0.5;
+       h=h*0.72+cont*0.28;
+       /* ② 冻原斑块：域扭曲 Worley，按细胞 id 在苔藓绿 / 裸土褐之间连续过渡；
+            边界处降对比（soft）→ 有机镶嵌，不再是全球均匀的多边形网格线 */
+       w(nx*ps+cf+wx*0.8,ny*ps+wz*0.8,nz*ps+wx*0.40,wo);
+       const myc=wo[2];
+       const edge=smoothstep(0.0,0.16,wo[1]-wo[0]);
+       const soft=0.40+0.60*edge;
+       let sp=0;
+       if(h<sea){
+         const t=smoothstep(sea-0.2,sea,h);
+         mixc(p[0],p[5],t,tmp);sp=220*(1-t*0.5);
+       }else{
+         const t=clamp01((h-sea)/(1-sea));
+         mixc(p[2],p[6],smoothstep(0.05,0.5,t+latf*0.25),tmp);
+         /* 斑块分派：苔藓斑 / 裸土斑 */
+         mixc(tmp,p[1],smoothstep(0.34,0.86,myc)*0.42*soft,tmp);
+         mixc(tmp,p[3],smoothstep(0.22,0.03,myc)*0.42*soft,tmp);
+         /* ③ 苔藓绒斑：高频 fbm 打散，大小不一 */
+         const moss=fbm(n,nx*6+17,ny*6,nz*6,3)*0.5+0.5;
+         mixc(tmp,p[1],smoothstep(0.52,0.80,moss)*0.30,tmp);
+         mixc(tmp,p[4],smoothstep(0.24,0.44,latf)*0.7,tmp);
+         /* ④ 热喀斯特小湖群：低平处散布水洼（苔原标志地貌） */
+         const flat=1-smoothstep(0.10,0.34,t);
+         const fine=fbm(n,nx*11+23,ny*11,nz*11,3)*0.5+0.5;
+         const pond=flat*smoothstep(0.60,0.84,fine)*(1-smoothstep(0.72,0.92,t));
+         if(pond>0.01)mixc(tmp,p[0],pond*0.72,tmp);
+         /* ⑤ 冻土龟裂：仅低平区断续出现，不再铺满全球 */
+         const fine2=fbm(n,nx*9.5+83,ny*9.5+31,nz*9.5,2)*0.5+0.5;
+         const crack=clamp01(flat*(1-edge)*smoothstep(0.68,0.92,fine2)*1.6);
+         if(crack>0.02)mixc(tmp,p[4],crack*0.55,tmp);
+         sp=18;
+       }
+       const seaIce=h<sea;
+       const icv=iceCap(n,nx,ny,nz,latf,seaIce?0.64:0.54,0.13,cf,seaIce,ic);
+       if(icv>0){
+         mixc(tmp,p[4],icv,tmp);
+         const k=1+(ic[0]-0.5)*0.20*icv;
+         tmp[0]*=k;tmp[1]*=k;tmp[2]*=k;
+       }
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=sp;
+       const cl=fbm(n,nx*2.5+61,ny*2.5,nz*2.5,4)*0.5+0.5;
+       o[5]=smoothstep(0.5,0.72,cl)*cov*255;
+     };
+   }},
+  {name:"丛林湿地型",w:3,hs:14,
+   pal:[[196,82,8],[178,64,22],[128,48,26],[96,56,34],[74,62,20],[212,30,60],[46,44,16]],
+   at:[168,64,60],ats:[0.65,0.95],amb:0.1,limb:0.16,cloudP:1,cloudMul:1.35,
+   traits:["全球雨林覆盖","大型三角洲水系"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const sea=rnd(rand,0.38,0.5),cov=rnd(rand,0.6,0.92),rf=rnd(rand,2.6,4.4);
+     const ic=cfg._ice;
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       let h=fbm(n,nx*1.7+cf,ny*1.7,nz*1.7,5)*0.5+0.5;
+       const river=smoothstep(0.66,0.9,ridged(n,nx*rf+cf,ny*rf,nz*rf,4));
+       h-=river*0.16;
+       const latf=Math.abs(ny);let sp=0,em=0;
+       if(h<sea){
+         const t=smoothstep(sea-0.18,sea,h);
+         mixc(p[0],p[5],t*0.1,tmp);sp=235*(1-t*0.4);
+       }else{
+         const t=clamp01((h-sea)/(1-sea));
+         mixc(p[3],p[2],smoothstep(0.02,0.3,t),tmp);
+         const veg=fbm(n,nx*5.5+3,ny*5.5,nz*5.5,4)*0.5+0.5;
+         mixc(tmp,p[1],smoothstep(0.35,0.72,veg)*0.85,tmp);
+         const swamp=smoothstep(0.6,0.78,fbm(n,nx*1.3+44,ny*1.3,nz*1.3,3)*0.5+0.5);
+         mixc(tmp,p[6],swamp*0.7,tmp);
+         mixc(tmp,p[4],smoothstep(0.45,0.75,t+latf*0.4),tmp);
+         sp=24*(1-swamp);
+       }
+       const seaIce=h<sea;
+       const icv=iceCap(n,nx,ny,nz,latf,seaIce?0.93:0.87,0.10,cf,seaIce,ic);
+       if(icv>0){
+         const iv=icv*0.38;          // 湿热星球：冰盖缩减至极区且稀薄半透
+         mixc(tmp,p[5],iv,tmp);
+         const k=1+(ic[0]-0.5)*0.20*iv;
+         tmp[0]*=k;tmp[1]*=k;tmp[2]*=k;
+       }
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=em;o[4]=sp;
+       const cl=fbm(n,nx*2.3+9,ny*2.3,nz*2.3,5)*0.5+0.5;
+       o[5]=smoothstep(0.4,0.62,cl)*cov*255;
+     };
+   }}
+  ]
+},
+
+/* ── 2. 全球海洋行星 ───────────────────────────── */
+ocean:{
+  name:"全球海洋行星",en:"PELAGIC",color:"#4fa8ff",weight:8,
+  meta:{dia:[9000,19000],dens:[0.8,1.15],temp:[-12,58],rot:[11,60],orb:[200,700],
+    atmos:["氮-水蒸气（浓雾）","富氧+高湿","氢-氦稀薄+水汽","二氧化碳-氮"],
+    res:["液态水","重水","深海生物质","溶解矿物","盐晶"],hab:64},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"无陆深渊型",w:3,hs:14,
+   pal:[[224,84,6],[206,64,16],[190,56,32],[176,46,52],[236,12,94],[150,28,54],[38,26,34]],
+   at:[196,74,66],ats:[0.6,0.9],amb:0.08,limb:0.2,cloudP:1,cloudMul:1.1,
+   traits:["无大陆深海","全球性洋流"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const sea=rnd(rand,0.72,0.86),cov=rnd(rand,0.5,0.85);
+     const ic=cfg._ice;
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const sw=turb(n,nx*0.9+cf,ny*0.9,nz*0.9,3);
+       let h=fbm(n,nx*1.5+sw*0.5+cf,ny*1.5,nz*1.5+sw*0.5,5)*0.5+0.5;
+       const latf=Math.abs(ny);let sp=200;
+       const t=smoothstep(sea-0.34,sea,h);
+       mixc(p[0],p[3],t,tmp);
+       mixc(tmp,p[4],smoothstep(0.86,1.0,t),tmp);
+       sp=255*(1-t*0.3);
+       const icv=iceCap(n,nx,ny,nz,latf,0.78,0.13,cf,true,ic);
+       if(icv>0){
+         mixc(tmp,p[4],icv,tmp);
+         const k=1+(ic[0]-0.5)*0.20*icv;
+         tmp[0]*=k;tmp[1]*=k;tmp[2]*=k;
+       }
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=sp;
+       const cl=fbm(n,nx*2.2+44,ny*2.2,nz*2.2,4)*0.5+0.5;
+       o[5]=smoothstep(0.4,0.62,cl)*cov*255;
+     };
+   }},
+  {name:"环礁浅海型",w:3,hs:12,
+   pal:[[192,88,10],[184,62,26],[172,52,44],[56,40,42],[44,34,54],[204,22,88],[36,28,34]],
+   at:[190,72,68],ats:[0.55,0.85],amb:0.09,limb:0.2,cloudP:1,cloudMul:1.2,
+   traits:["环礁群岛","浅海大陆架"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const sea=rnd(rand,0.60,0.72),is=rnd(rand,7,14),cov=rnd(rand,0.45,0.8);
+     const ic=cfg._ice;
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const base=fbm(n,nx*1.4+cf,ny*1.4,nz*1.4,4)*0.5+0.5;
+       w(nx*is+cf,ny*is,nz*is,wo);
+       const ring=Math.exp(-Math.pow((wo[0]-0.30)/0.075,2));
+       const core=1-smoothstep(0.10,0.28,wo[0]);
+       const land=clamp01(base*0.5+ring*0.55+core*0.55-0.34);
+       let sp=0;
+       if(land<sea){
+         const t=smoothstep(sea-0.26,sea,land);
+         mixc(p[0],p[2],t,tmp);
+         mixc(tmp,p[5],smoothstep(0.6,1,t),tmp);
+         sp=255*(1-t*0.3);
+       }else{
+         const t=clamp01((land-sea)/(1-sea));
+         mixc(p[3],p[4],smoothstep(0.05,0.55,t),tmp);
+         sp=30;
+       }
+       const seaIce=land<sea;
+       const icv=iceCap(n,nx,ny,nz,Math.abs(ny),seaIce?0.80:0.70,0.12,cf,seaIce,ic);
+       if(icv>0){
+         mixc(tmp,p[5],icv,tmp);
+         const k=1+(ic[0]-0.5)*0.20*icv;
+         tmp[0]*=k;tmp[1]*=k;tmp[2]*=k;
+       }
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=sp;
+       const cl=fbm(n,nx*2.8+13,ny*2.8,nz*2.8,4)*0.5+0.5;
+       o[5]=smoothstep(0.46,0.68,cl)*cov*255;
+     };
+   }},
+  {name:"冰壳洋型",w:2,hs:16,
+   pal:[[212,70,10],[200,50,26],[190,42,44],[204,30,74],[232,14,94],[176,34,58],[28,22,36]],
+   at:[198,62,72],ats:[0.5,0.85],amb:0.09,limb:0.24,cloudP:0.8,cloudMul:1.05,
+   traits:["浮冰带","两极冰盖"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const sea=rnd(rand,0.5,0.66),floe=rnd(rand,9,16),cov=rnd(rand,0.4,0.75);
+     const ic=cfg._ice;
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const base=fbm(n,nx*1.6+cf,ny*1.6,nz*1.6,5)*0.5+0.5;
+       const latf=Math.abs(ny);
+       w(nx*floe+cf,ny*floe*0.6,nz*floe,wo);
+       const floeEdge=1-smoothstep(0.015,0.09,wo[1]-wo[0]);
+       let sp=0;
+       if(base<sea){
+         const t=smoothstep(sea-0.26,sea,base);
+         mixc(p[0],p[2],t,tmp);sp=230*(1-t*0.35);
+       }else{
+         mixc(p[3],p[5],smoothstep(0.0,0.5,clamp01((base-sea)/(1-sea))),tmp);
+         sp=120;
+       }
+       const icv=iceCap(n,nx,ny,nz,latf,0.40,0.11,cf,true,ic);
+       const ice=clamp01(icv+floeEdge*0.45);
+       if(ice>0){
+         mixc(tmp,p[4],ice,tmp);
+         const k=1+(ic[0]-0.5)*0.20*ice;
+         tmp[0]*=k;tmp[1]*=k;tmp[2]*=k;
+       }
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=sp;
+       const cl=fbm(n,nx*2.4+33,ny*2.4,nz*2.4,4)*0.5+0.5;
+       o[5]=smoothstep(0.48,0.7,cl)*cov*255;
+     };
+   }}
+  ]
+},
+
+/* ── 3. 干旱沙漠行星 ───────────────────────────── */
+desert:{
+  name:"干旱沙漠行星",en:"ARID",color:"#ffb04f",weight:10,
+  meta:{dia:[5200,12800],dens:[0.75,1.1],temp:[8,96],rot:[14,80],orb:[120,480],
+    atmos:["稀薄二氧化碳","氮-二氧化碳（尘暴）","极稀薄氩-二氧化碳","无显著大气"],
+    res:["硅酸盐砂","金属氧化物","地下冰层","钛铁矿","稀土"],hab:22},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"沙丘型",w:3,hs:16,
+   pal:[[32,58,58],[26,64,46],[18,58,34],[40,30,62],[34,18,26],[10,42,20],[46,26,74]],
+   at:[30,66,60],ats:[0.18,0.42],amb:0.1,limb:0.26,cloudP:0.4,cloudMul:1.3,
+   traits:["全球沙海","极端昼夜温差"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const duneF=rnd(rand,8,22);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const base=fbm(n,nx*1.5+cf,ny*1.5,nz*1.5,5)*0.5+0.5;
+       const dw=fbm(n,nx*2.6+cf,ny*2.6,nz*2.6,4);
+       const st=Math.sin(dw*duneF+base*3)*0.5+0.5;
+       const rock=fbm(n,nx*4.4+21,ny*4.4,nz*4.4,5)*0.5+0.5;
+       ramp(p,base*0.55+st*0.25+rock*0.2,tmp);
+       const sh2=0.82+0.36*st;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       const rv=ridged(n,nx*3.4+9,ny*3.4,nz*3.4,4);
+       mixc(tmp,p[5],smoothstep(0.72,0.92,rv)*0.7,tmp);
+       const salt=smoothstep(0.66,0.78,fbm(n,nx*2+60,ny*2,nz*2,3)*0.5+0.5);
+       mixc(tmp,p[6],salt*0.55,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=18;
+       o[5]=cfg.hasCloud?smoothstep(0.58,0.8,fbm(n,nx*3+80,ny*3,nz*3,4)*0.5+0.5)*140:0;
+     };
+   }},
+  {name:"岩漠台地型",w:3,hs:16,
+   pal:[[24,46,42],[18,52,30],[12,44,22],[28,34,52],[38,26,36],[8,34,16],[34,20,66]],
+   at:[18,58,58],ats:[0.12,0.32],amb:0.1,limb:0.3,cloudP:0.25,cloudMul:1.2,
+   traits:["风蚀台地","砾石戈壁"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const ms=rnd(rand,4,8);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const base=fbm(n,nx*1.6+cf,ny*1.6,nz*1.6,4)*0.5+0.5;
+       w(nx*ms+cf,ny*ms,nz*ms,wo);
+       // 平顶台地：细胞中心为平台，边缘为陡崖
+       const mesa=1-smoothstep(0.22,0.42,wo[0]);
+       const cliff=Math.exp(-Math.pow((wo[0]-0.36)/0.07,2));
+       const h=clamp01(base*0.5+mesa*0.5);
+       ramp(p,h,tmp);
+       const sh2=1-(1-mesa)*0.34+cliff*0.32;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       const grit=fbm(n,nx*9+3,ny*9,nz*9,3)*0.5+0.5;
+       mixc(tmp,p[6],smoothstep(0.6,0.85,grit)*0.35,tmp);
+       const rv=ridged(n,nx*3.8+17,ny*3.8,nz*3.8,4);
+       mixc(tmp,p[5],smoothstep(0.78,0.95,rv)*0.6,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=12;
+       o[5]=cfg.hasCloud?smoothstep(0.62,0.84,fbm(n,nx*2.8+55,ny*2.8,nz*2.8,4)*0.5+0.5)*120:0;
+     };
+   }},
+  {name:"盐碱裂壳型",w:2,hs:14,
+   pal:[[44,22,72],[36,18,58],[28,14,44],[20,10,32],[200,14,86],[16,26,22],[52,16,90]],
+   at:[40,30,68],ats:[0.15,0.4],amb:0.12,limb:0.24,cloudP:0.2,cloudMul:1.1,
+   traits:["干涸盐湖","多边形裂壳"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const ps=rnd(rand,5,11);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const base=fbm(n,nx*1.8+cf,ny*1.8,nz*1.8,4)*0.5+0.5;
+       w(nx*ps+cf,ny*ps,nz*ps,wo);
+       const crack=1-smoothstep(0.006,0.055,wo[1]-wo[0]);
+       w(nx*ps*2.6+9,ny*ps*2.6,nz*ps*2.6,wo);
+       const crack2=1-smoothstep(0.004,0.04,wo[1]-wo[0]);
+       ramp(p,base,tmp);
+       mixc(tmp,p[6],clamp01(crack*0.85+crack2*0.4),tmp);
+       const pan=smoothstep(0.55,0.78,fbm(n,nx*1.2+30,ny*1.2,nz*1.2,3)*0.5+0.5);
+       mixc(tmp,p[4],pan*0.9,tmp);
+       const dark=smoothstep(0.35,0.15,base);
+       mixc(tmp,p[5],dark*0.8,tmp);
+       const sp=255*(1-crack*0.8)*(0.35+0.65*pan);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=sp;
+       o[5]=cfg.hasCloud?smoothstep(0.66,0.86,fbm(n,nx*3+12,ny*3,nz*3,4)*0.5+0.5)*110:0;
+     };
+   }},
+  {name:"峡谷裂谷型",w:2,hs:18,
+   pal:[[16,54,44],[10,58,32],[4,50,24],[24,42,54],[36,30,40],[8,38,18],[30,22,68]],
+   at:[14,60,56],ats:[0.14,0.36],amb:0.1,limb:0.28,cloudP:0.25,cloudMul:1.15,
+   traits:["深切峡谷网","层理沉积岩"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const cv=rnd(rand,2.2,4.2),layers=rnd(rand,10,26);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const warp=fbm(n,nx*1.2+cf,ny*1.2,nz*1.2,3);
+       const rv=ridged(n,nx*cv+warp*0.8+cf,ny*cv,nz*cv+warp*0.8,5);
+       const canyon=smoothstep(0.62,0.93,rv);
+       const strata=Math.sin(fbm(n,nx*1.1+7,ny*1.1,nz*1.1,3)*6+ny*layers)*0.5+0.5;
+       ramp(p,strata*0.62+0.2,tmp);
+       const sh2=0.7+0.5*canyon;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       // 谷底阴影 + 崖壁亮边
+       const wall=Math.exp(-Math.pow((rv-0.70)/0.05,2));
+       mixc(tmp,p[6],wall*0.5,tmp);
+       mixc(tmp,p[5],canyon*0.75,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=10;
+       o[5]=cfg.hasCloud?smoothstep(0.64,0.86,fbm(n,nx*2.6+88,ny*2.6,nz*2.6,4)*0.5+0.5)*115:0;
+     };
+   }}
+  ]
+},
+
+/* ── 4. 冰封世界 ───────────────────────────────── */
+ice:{
+  name:"冰封世界",en:"CRYO",color:"#a8e8ff",weight:9,
+  meta:{dia:[4800,12400],dens:[0.7,1.05],temp:[-190,-28],rot:[16,300],orb:[240,1400],
+    atmos:["氮-甲烷（稀薄）","二氧化碳霜雾","极稀薄水蒸气","无大气（真空冰面）"],
+    res:["水冰","甲烷冰","氨晶体","金属氢","冻结核燃料"],hab:14},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"裂隙冰原型",w:3,hs:16,
+   pal:[[204,42,88],[196,50,76],[210,58,58],[220,46,40],[16,44,16],[188,38,92],[130,30,44]],
+   at:[196,58,74],ats:[0.3,0.6],amb:0.09,limb:0.24,cloudP:0.35,cloudMul:0.9,
+   traits:["全球冰盖","深层地下海洋"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const subs=chance(rand,0.55);
+     if(subs)cfg.traits.push("冰下液态水层");
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const base=fbm(n,nx*1.9+cf,ny*1.9,nz*1.9,5)*0.5+0.5;
+       const cr=ridged(n,nx*4.2+cf,ny*4.2,nz*4.2,4);
+       const crack=smoothstep(0.62,0.88,cr);
+       ramp(p,base*0.75+0.2,tmp);
+       mixc(tmp,p[2],crack*0.85,tmp);
+       mixc(tmp,p[4],smoothstep(0.28,0.1,base)*0.9,tmp);
+       if(subs){
+         const lake=smoothstep(0.70,0.84,fbm(n,nx*2.2+40,ny*2.2,nz*2.2,3)*0.5+0.5);
+         mixc(tmp,p[6],lake*0.7,tmp);
+       }
+       const sp=255*(1-crack*0.7)*(0.3+0.7*smoothstep(0.35,0.6,base));
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=sp;
+       o[5]=cfg.hasCloud?smoothstep(0.62,0.82,fbm(n,nx*2.8+15,ny*2.8,nz*2.8,4)*0.5+0.5)*110:0;
+     };
+   }},
+  {name:"冰川条纹型",w:3,hs:14,
+   pal:[[198,50,84],[192,56,70],[186,62,56],[202,48,44],[210,36,92],[176,44,64],[14,40,18]],
+   at:[194,60,76],ats:[0.32,0.62],amb:0.09,limb:0.22,cloudP:0.4,cloudMul:0.95,
+   traits:["流动冰川","冰流线理"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const fl=rnd(rand,1.0,2.2);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const q=fbm(n,nx*1.1+cf,ny*1.1,nz*1.1,3);
+       // 沿经线拉伸的流线：域扭曲后做条带
+       const flow=Math.sin(ny*7+q*fl*6+nx*0.6)*0.5+0.5;
+       const base=fbm(n,nx*2.0+cf,ny*2.0,nz*2.0,4)*0.5+0.5;
+       ramp(p,clamp01(base*0.55+flow*0.35+0.1),tmp);
+       const shear=smoothstep(0.72,0.95,ridged(n,nx*3.2+q,ny*3.2,nz*3.2,4));
+       mixc(tmp,p[4],shear*0.7,tmp);
+       mixc(tmp,p[5],smoothstep(0.7,0.9,flow)*0.5,tmp);
+       const sp=255*(0.35+0.65*flow)*(1-shear*0.5);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=sp;
+       o[5]=cfg.hasCloud?smoothstep(0.6,0.82,fbm(n,nx*2.6+71,ny*2.6,nz*2.6,4)*0.5+0.5)*105:0;
+     };
+   }},
+  {name:"霜晶型",w:2,hs:18,
+   pal:[[200,36,90],[194,44,78],[204,52,64],[186,40,52],[210,28,94],[176,36,70],[16,34,20]],
+   at:[198,52,78],ats:[0.28,0.58],amb:0.1,limb:0.26,cloudP:0.3,cloudMul:0.85,
+   traits:["霜晶结壳","升华-再凝结循环"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const cs=rnd(rand,6,13);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const base=fbm(n,nx*1.8+cf,ny*1.8,nz*1.8,5)*0.5+0.5;
+       w(nx*cs+cf,ny*cs,nz*cs,wo);
+       const f1=wo[0],edge=smoothstep(0.006,0.05,wo[1]-wo[0]);
+       w(nx*cs*2.4+5,ny*cs*2.4,nz*cs*2.4,wo);
+       const e2=smoothstep(0.004,0.035,wo[1]-wo[0]);
+       ramp(p,base*0.7+0.15,tmp);
+       const shade=0.66+0.44*(1-clamp01(f1*2.4))+0.22*edge+0.12*e2;
+       tmp[0]*=shade;tmp[1]*=shade;tmp[2]*=shade;
+       mixc(tmp,p[5],e2*0.6,tmp);
+       mixc(tmp,p[6],smoothstep(0.3,0.12,base)*0.85,tmp);
+       const sp=255*clamp01(edge*0.7+e2*0.5+0.25);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=sp;
+       o[5]=cfg.hasCloud?smoothstep(0.62,0.84,fbm(n,nx*3+25,ny*3,nz*3,4)*0.5+0.5)*100:0;
+     };
+   }},
+  {name:"薄冰斑驳型",w:2,hs:16,
+   pal:[[206,40,86],[196,48,72],[188,54,56],[32,30,30],[24,24,22],[214,30,92],[136,26,44]],
+   at:[200,54,72],ats:[0.3,0.62],amb:0.09,limb:0.24,cloudP:0.45,cloudMul:1.0,
+   traits:["薄冰覆盖","裸露基岩"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const thr=rnd(rand,0.42,0.6);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const base=fbm(n,nx*2.1+cf,ny*2.1,nz*2.1,5)*0.5+0.5;
+       const patch=smoothstep(thr-0.06,thr+0.06,base);
+       const rockN=fbm(n,nx*4.6+19,ny*4.6,nz*4.6,4)*0.5+0.5;
+       ramp(p,0.2+rockN*0.6,tmp);         // 基岩
+       mixc(tmp,p[0],patch*0.92,tmp);      // 覆冰
+       mixc(tmp,p[2],patch*smoothstep(0.62,0.85,rockN)*0.5,tmp);
+       const crack=smoothstep(0.74,0.93,ridged(n,nx*5.4+cf,ny*5.4,nz*5.4,4));
+       mixc(tmp,p[6],crack*patch*0.7,tmp);
+       const sp=255*(patch*(1-crack*0.6)*0.9+(1-patch)*0.12);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=sp;
+       o[5]=cfg.hasCloud?smoothstep(0.6,0.82,fbm(n,nx*2.9+47,ny*2.9,nz*2.9,4)*0.5+0.5)*110:0;
+     };
+   }}
+  ]
+},
+
+/* ── 5. 荒芜岩质行星 ───────────────────────────── */
+rocky:{
+  name:"荒芜岩质行星",en:"BARREN",color:"#c0b0a0",weight:11,
+  meta:{dia:[2400,10200],dens:[0.9,1.35],temp:[-120,80],rot:[20,900],orb:[60,600],
+    atmos:["无大气","极稀薄外逸层","痕量钠气","二氧化碳（痕量）"],
+    res:["铁镍核心","钛矿","铂族金属","稀土","氦-3"],hab:6},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"陨击型",w:4,hs:20,
+   pal:[[26,16,30],[24,14,44],[20,12,58],[24,8,68],[18,10,22],[30,20,38],[22,6,14]],
+   at:[30,20,60],ats:[0.05,0.18],amb:0.06,limb:0.3,
+   traits:["无大气真空表面","强宇宙辐射","密集陨击地貌"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const cs=rnd(rand,5,11);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       let h=fbm(n,nx*2.2+cf,ny*2.2,nz*2.2,6)*0.5+0.5;
+       const maria=smoothstep(0.30,0.48,fbm(n,nx*1.1+55,ny*1.1,nz*1.1,3)*0.5+0.5);
+       ramp(p,h*0.7+0.15,tmp);
+       mixc(tmp,p[6],maria*0.75,tmp);
+       w(nx*cs,ny*cs,nz*cs,wo);
+       const f1=wo[0];
+       if(f1<0.42){
+         const d=smoothstep(0.02,0.30,f1);
+         const rim=Math.exp(-Math.pow((f1-0.30)/0.07,2));
+         const sh2=1-(1-d)*0.42+rim*0.5;
+         tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       }
+       w(nx*cs*2.7+3,ny*cs*2.7,nz*cs*2.7,wo);
+       if(wo[0]<0.3){
+         const d=smoothstep(0,0.2,wo[0]);
+         const sh2=1-(1-d)*0.25;
+         tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       }
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=8;o[5]=0;
+     };
+   }},
+  {name:"月海玄武岩型",w:3,hs:16,
+   pal:[[24,18,26],[22,16,38],[18,14,52],[16,10,32],[30,16,22],[26,10,18],[34,14,44]],
+   at:[26,24,56],ats:[0.05,0.16],amb:0.06,limb:0.32,
+   traits:["玄武岩月海","古老高地"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const thr=rnd(rand,0.44,0.58);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const big=fbm(n,nx*0.9+cf,ny*0.9,nz*0.9,3)*0.5+0.5;
+       const det=fbm(n,nx*3.4+11,ny*3.4,nz*3.4,4)*0.5+0.5;
+       const maria=smoothstep(thr-0.07,thr+0.07,big);
+       // 高地：亮、破碎；月海：暗、平缓
+       ramp(p,0.06+det*0.9,tmp);
+       mixc(tmp,p[3],maria*0.85,tmp);
+       mixc(tmp,p[4],maria*smoothstep(0.55,0.8,det)*0.5,tmp);
+       const wr=ridged(n,nx*2.6+cf,ny*2.6,nz*2.6,4);
+       mixc(tmp,p[6],smoothstep(0.78,0.95,wr)*maria*0.5,tmp);
+       const sp=8*(1-maria*0.5);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=sp;o[5]=0;
+     };
+   }},
+  {name:"裂谷断层型",w:2,hs:18,
+   pal:[[28,20,32],[24,16,46],[20,12,60],[16,8,72],[12,10,26],[32,18,40],[18,6,16]],
+   at:[24,26,58],ats:[0.05,0.18],amb:0.06,limb:0.3,
+   traits:["全球性裂谷系","断层崖"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const rf=rnd(rand,2.0,3.6);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const warp=fbm(n,nx*1.3+cf,ny*1.3,nz*1.3,3);
+       const rv=ridged(n,nx*rf+warp*0.7+cf,ny*rf,nz*rf+warp*0.7,5);
+       const fault=smoothstep(0.58,0.9,rv);
+       const base=fbm(n,nx*2.4+7,ny*2.4,nz*2.4,5)*0.5+0.5;
+       ramp(p,base*0.7+0.18,tmp);
+       const sh2=0.62+0.5*fault;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       mixc(tmp,p[4],fault*0.8,tmp);
+       const wall=Math.exp(-Math.pow((rv-0.62)/0.045,2));
+       mixc(tmp,p[5],wall*0.7,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=8;o[5]=0;
+     };
+   }},
+  {name:"风化碎石型",w:2,hs:22,
+   pal:[[30,22,34],[26,18,48],[22,14,62],[34,12,72],[16,12,28],[36,20,42],[20,8,18]],
+   at:[32,22,58],ats:[0.05,0.2],amb:0.07,limb:0.28,
+   traits:["厚层风化壳","碎石斜坡"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const gs=rnd(rand,14,26);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const base=fbm(n,nx*1.9+cf,ny*1.9,nz*1.9,5)*0.5+0.5;
+       w(nx*gs+cf,ny*gs,nz*gs,wo);
+       const grit=clamp01(1-wo[0]*2.9);
+       ramp(p,base*0.72+0.16,tmp);
+       const sh2=0.72+0.5*grit;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       const slope=smoothstep(0.5,0.8,fbm(n,nx*3.2+31,ny*3.2,nz*3.2,4)*0.5+0.5);
+       mixc(tmp,p[5],slope*0.45,tmp);
+       mixc(tmp,p[6],smoothstep(0.25,0.1,base)*0.7,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=6;o[5]=0;
+     };
+   }}
+  ]
+},
+
+/* ── 6. 熔岩炼狱行星 ───────────────────────────── */
+lava:{
+  name:"熔岩炼狱行星",en:"MOLTEN",color:"#ff5a2a",weight:8,
+  meta:{dia:[5600,14000],dens:[1.0,1.4],temp:[620,1650],rot:[8,400],orb:[4,90],
+    atmos:["硅酸盐蒸气","二氧化碳-硫化物","金属蒸气云","钠-硅蒸气"],
+    res:["熔融金属","硅酸盐熔体","硫化物矿","地热能","稀有重金属"],hab:2},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"熔岩海型",w:3,hs:12,
+   pal:[[16,44,6],[14,60,14],[24,88,40],[34,96,56],[44,96,74],[8,40,4],[20,80,90]],
+   at:[16,90,52],ats:[0.5,0.85],amb:0.16,limb:0.1,cloudP:0.5,cloudMul:0.8,
+   traits:["全球性熔融表面","熔岩海"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const lvl=rnd(rand,0.62,0.76);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const s=fbm(n,nx*1.3+cf,ny*1.3,nz*1.3,4)*0.5+0.5;
+       const heat=smoothstep(lvl-0.12,lvl+0.08,s);
+       const crust=fbm(n,nx*3.4+30,ny*3.4,nz*3.4,5)*0.5+0.5;
+       const rock=0.5+crust*0.55;
+       tmp[0]=p[1][0]*rock;tmp[1]=p[1][1]*rock;tmp[2]=p[1][2]*rock;
+       mixc(tmp,p[0],smoothstep(0.35,0.7,crust),tmp);
+       // 结壳浮块：靠近熔岩面处的深色浮渣
+       const raft=Math.exp(-Math.pow((s-lvl)/0.055,2));
+       mixc(tmp,p[6],(1-heat)*raft*0.8,tmp);
+       mixc(tmp,p[2],smoothstep(0.4,0.66,heat),tmp);
+       mixc(tmp,p[3],smoothstep(0.6,0.8,heat),tmp);
+       mixc(tmp,p[4],smoothstep(0.82,1.0,heat),tmp);
+       const wave=0.88+0.24*Math.sin(s*22+crust*6);
+       tmp[0]*=wave;tmp[1]*=wave;tmp[2]*=wave;
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];
+       o[3]=Math.pow(heat,1.25)*250;o[4]=heat*40;
+       o[5]=cfg.hasCloud?smoothstep(0.6,0.84,fbm(n,nx*2.6+70,ny*2.6,nz*2.6,4)*0.5+0.5)*90:0;
+     };
+   }},
+  {name:"裂隙喷发型",w:3,hs:10,
+   pal:[[14,46,6],[12,58,12],[22,86,38],[32,94,54],[42,94,72],[8,38,4],[18,78,88]],
+   at:[14,92,50],ats:[0.45,0.8],amb:0.15,limb:0.12,cloudP:0.5,cloudMul:0.85,
+   traits:["全球性熔融表面","剧烈火山活动"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const cr=ridged(n,nx*3.0+cf,ny*3.0,nz*3.0,5);
+       let heat=smoothstep(0.58,0.90,cr);
+       const crust=fbm(n,nx*3.6+30,ny*3.6,nz*3.6,5)*0.5+0.5;
+       const rock=0.55+crust*0.5;
+       tmp[0]=p[1][0]*rock;tmp[1]=p[1][1]*rock;tmp[2]=p[1][2]*rock;
+       mixc(tmp,p[0],smoothstep(0.35,0.7,crust),tmp);
+       const shell=smoothstep(0.34,0.62,cr)*(1-smoothstep(0.62,0.8,cr));
+       mixc(tmp,p[1],shell*0.6,tmp);
+       mixc(tmp,p[2],smoothstep(0.42,0.66,heat),tmp);
+       mixc(tmp,p[3],smoothstep(0.62,0.82,heat),tmp);
+       mixc(tmp,p[4],smoothstep(0.84,1.0,heat),tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];
+       o[3]=Math.pow(heat,1.3)*255;o[4]=heat*40;
+       o[5]=cfg.hasCloud?smoothstep(0.6,0.84,fbm(n,nx*2.6+70,ny*2.6,nz*2.6,4)*0.5+0.5)*90:0;
+     };
+   }},
+  {name:"火山群型",w:2,hs:12,
+   pal:[[18,40,6],[16,52,12],[26,78,34],[36,88,50],[46,90,68],[6,34,4],[22,70,84]],
+   at:[18,86,48],ats:[0.55,0.9],amb:0.16,limb:0.12,cloudP:0.7,cloudMul:0.9,
+   traits:["超级火山群","火山灰沉降"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const vs=rnd(rand,4,9);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       w(nx*vs+cf,ny*vs,nz*vs,wo);
+       // 火山锥：细胞中心为口，边缘为锥坡
+       const cone=1-smoothstep(0.05,0.42,wo[0]);
+       const caldera=1-smoothstep(0.0,0.10,wo[0]);
+       const base=fbm(n,nx*2.2+cf,ny*2.2,nz*2.2,5)*0.5+0.5;
+       const rock=0.55+base*0.5;
+       tmp[0]=p[1][0]*rock;tmp[1]=p[1][1]*rock;tmp[2]=p[1][2]*rock;
+       mixc(tmp,p[0],smoothstep(0.4,0.72,base),tmp);
+       const sh2=1-cone*0.34+Math.exp(-Math.pow((wo[0]-0.34)/0.06,2))*0.3;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       const ash=smoothstep(0.55,0.8,fbm(n,nx*1.6+22,ny*1.6,nz*1.6,3)*0.5+0.5);
+       mixc(tmp,p[6],ash*0.6,tmp);
+       let heat=caldera*0.95;
+       mixc(tmp,p[2],smoothstep(0.3,0.6,heat),tmp);
+       mixc(tmp,p[3],smoothstep(0.55,0.8,heat),tmp);
+       mixc(tmp,p[4],smoothstep(0.8,1.0,heat),tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];
+       o[3]=Math.pow(heat,1.4)*245;o[4]=heat*30;
+       o[5]=cfg.hasCloud?smoothstep(0.55,0.8,fbm(n,nx*2.4+51,ny*2.4,nz*2.4,4)*0.5+0.5)*130:0;
+     };
+   }},
+  {name:"板块结壳型",w:2,hs:10,
+   pal:[[12,48,5],[10,60,11],[20,84,34],[30,92,50],[40,92,70],[6,36,3],[16,74,86]],
+   at:[12,90,50],ats:[0.45,0.8],amb:0.15,limb:0.12,cloudP:0.45,cloudMul:0.8,
+   traits:["漂浮地壳板块","板块间熔岩上涌"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const ps=rnd(rand,3,6);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       w(nx*ps+cf,ny*ps,nz*ps,wo);
+       const gap=1-smoothstep(0.02,0.16,wo[1]-wo[0]);   // 板块缝隙
+       const crust=fbm(n,nx*3.2+30,ny*3.2,nz*3.2,5)*0.5+0.5;
+       const rock=0.5+crust*0.55;
+       tmp[0]=p[1][0]*rock;tmp[1]=p[1][1]*rock;tmp[2]=p[1][2]*rock;
+       mixc(tmp,p[0],smoothstep(0.35,0.72,crust),tmp);
+       mixc(tmp,p[6],(1-gap)*0.25,tmp);
+       mixc(tmp,p[2],smoothstep(0.3,0.62,gap),tmp);
+       mixc(tmp,p[3],smoothstep(0.55,0.82,gap),tmp);
+       mixc(tmp,p[4],smoothstep(0.82,1.0,gap),tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];
+       o[3]=Math.pow(gap,1.2)*250;o[4]=gap*35;
+       o[5]=cfg.hasCloud?smoothstep(0.6,0.84,fbm(n,nx*2.6+70,ny*2.6,nz*2.6,4)*0.5+0.5)*90:0;
+     };
+   }}
+  ]
+},
+
+/* ── 7. 碳质黑曜行星 ───────────────────────────── */
+carbon:{
+  name:"碳质黑曜行星",en:"CARBON",color:"#ff8a3d",weight:6,
+  meta:{dia:[4200,11500],dens:[1.0,1.35],temp:[180,780],rot:[10,500],orb:[8,150],
+    atmos:["二氧化碳-一氧化碳","碳氢雾霭","硫-碳化合物","石墨尘暴"],
+    res:["石墨","金刚石矿脉","碳纳米结构","烃类沉积","硫"],hab:3},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"黑曜玻璃型",w:3,hs:10,
+   pal:[[20,10,7],[26,14,13],[14,26,22],[28,70,40],[38,84,62],[44,90,80],[18,18,10]],
+   at:[24,80,48],ats:[0.4,0.7],amb:0.13,limb:0.14,cloudP:0.45,cloudMul:0.9,
+   traits:["黑曜石地壳","高温还原性大气"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const glass=fbm(n,nx*2.4+cf,ny*2.4,nz*2.4,5)*0.5+0.5;
+       const t=glass*0.82+0.09;
+       if(t<0.42)mixc(p[0],p[1],t/0.42,tmp);
+       else mixc(p[1],p[2],(t-0.42)/0.58,tmp);
+       const rv=ridged(n,nx*4.6+cf,ny*4.6,nz*4.6,5);
+       const flow=smoothstep(0.68,0.95,rv);
+       mixc(tmp,p[3],flow*0.85,tmp);
+       mixc(tmp,p[4],smoothstep(0.80,0.95,rv),tmp);
+       mixc(tmp,p[5],smoothstep(0.93,1.0,rv),tmp);
+       const ash=smoothstep(0.55,0.8,fbm(n,nx*1.8+40,ny*1.8,nz*1.8,3)*0.5+0.5);
+       mixc(tmp,p[6],ash*0.6,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];
+       o[3]=Math.pow(flow,1.5)*230;o[4]=glass*70;
+       o[5]=cfg.hasCloud?smoothstep(0.58,0.82,fbm(n,nx*2.5+12,ny*2.5,nz*2.5,4)*0.5+0.5)*100:0;
+     };
+   }},
+  {name:"石墨尘原型",w:2,hs:8,
+   pal:[[24,6,8],[20,8,14],[16,6,20],[200,20,70],[210,30,84],[30,4,4],[44,10,30]],
+   at:[26,40,42],ats:[0.45,0.75],amb:0.14,limb:0.1,cloudP:0.6,cloudMul:1.0,
+   traits:["石墨粉尘覆盖","金刚石矿脉"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const vf=rnd(rand,3.2,5.6);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const dust=fbm(n,nx*1.7+cf,ny*1.7,nz*1.7,4)*0.5+0.5;
+       ramp(p,dust*0.8+0.1,tmp);
+       const vein=smoothstep(0.74,0.94,ridged(n,nx*vf+cf,ny*vf,nz*vf,4));
+       mixc(tmp,p[3],vein*0.9,tmp);
+       mixc(tmp,p[4],smoothstep(0.9,1.0,ridged(n,nx*vf*1.9+cf,ny*vf*1.9,nz*vf*1.9,3))*0.8,tmp);
+       const dune=Math.sin(fbm(n,nx*2.2+5,ny*2.2,nz*2.2,3)*9)*0.5+0.5;
+       const sh2=0.78+0.4*dune;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       mixc(tmp,p[5],smoothstep(0.3,0.1,dust)*0.8,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];
+       o[3]=vein*40;o[4]=vein*120+dust*20;
+       o[5]=cfg.hasCloud?smoothstep(0.55,0.8,fbm(n,nx*2.2+31,ny*2.2,nz*2.2,4)*0.5+0.5)*130:0;
+     };
+   }},
+  {name:"焦油湖型",w:2,hs:12,
+   pal:[[28,16,8],[24,20,12],[18,14,18],[32,34,26],[40,44,36],[12,10,8],[46,50,44]],
+   at:[30,60,40],ats:[0.5,0.85],amb:0.14,limb:0.12,cloudP:0.5,cloudMul:0.9,
+   traits:["烃类焦油湖","沥青质平原"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const lvl=rnd(rand,0.48,0.62);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const q=fbm(n,nx*1.1+cf,ny*1.1,nz*1.1,3);
+       const s=fbm(n,nx*1.8+q*0.6+cf,ny*1.8,nz*1.8+q*0.6,4)*0.5+0.5;
+       const lake=smoothstep(lvl-0.06,lvl+0.06,s);
+       const solid=1-lake;
+       const land=fbm(n,nx*3.4+17,ny*3.4,nz*3.4,4)*0.5+0.5;
+       ramp(p,0.04+land*0.92,tmp);
+       // 焦油：黑亮，带虹彩
+       const iri=Math.sin(s*30+q*10)*0.5+0.5;
+       tmp2[0]=p[3][0]+p[5][0]*iri*0.5;tmp2[1]=p[3][1]+p[4][1]*iri*0.4;tmp2[2]=p[3][2]+p[4][2]*iri*0.6;
+       mixc(tmp,tmp2,lake*0.95,tmp);
+       const sp=255*lake*0.9+ (1-lake)*20;
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=sp;
+       o[5]=cfg.hasCloud?smoothstep(0.58,0.82,fbm(n,nx*2.3+63,ny*2.3,nz*2.3,4)*0.5+0.5)*110:0;
+     };
+   }}
+  ]
+},
+
+/* ── 8. 酸雾毒气行星 ───────────────────────────── */
+toxic:{
+  name:"酸雾毒气行星",en:"TOXIC",color:"#b6ff5a",weight:7,
+  meta:{dia:[6800,15000],dens:[0.85,1.2],temp:[120,480],rot:[18,240],orb:[40,320],
+    atmos:["硫酸云层","二氧化碳-硫化氢","氯-氟化合物","高压氨-甲烷"],
+    res:["硫化物","硫酸","重金属雾","耐极端酶","卤素"],hab:1},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"硫酸云海型",w:3,hs:24,
+   pal:[[72,70,32],[58,62,22],[88,58,44],[46,72,30],[30,50,18],[96,44,58],[20,40,26]],
+   at:[80,64,56],ats:[0.7,1.0],amb:0.2,limb:0.12,
+   traits:["浓厚酸云","表面高压高温"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const storms=makeStorms(rand,rint(rand,2,5),0.75);
+     const surf=chance(rand,0.5);
+     if(surf)cfg.traits.push("云隙可见地表");
+     return function(c,G,o){
+       applyStorms(storms,G.lon,G.lat,G);
+       const lon=G.lon,lat=G.lat,rc=Math.cos(lat);
+       const px=Math.cos(lon)*rc,py=Math.sin(lat),pz=Math.sin(lon)*rc;
+       const sw=turb(n,px*1.4+cf,py*1.4,pz*1.4,4);
+       let t=fbm(n,px*2.3+sw*0.9,py*2.3,pz*2.3+sw*0.9,5)*0.5+0.5;
+       t=clamp01(t*0.8+0.1+sw*0.12);
+       ramp(p,t,tmp);
+       if(surf&&G.storm<0.2){
+         const gap=smoothstep(0.72,0.9,fbm(n,px*1.6+cf,py*1.6,pz*1.6,3)*0.5+0.5);
+         mixc(tmp,p[6],gap*0.8,tmp);
+       }
+       if(G.storm>0)mixc(tmp,p[5],G.storm*0.65,tmp);
+       const sh2=1-smoothstep(0.72,1.0,Math.abs(py))*0.3;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=0;o[5]=0;
+     };
+   }},
+  {name:"硫磺地壳型",w:3,hs:20,
+   pal:[[54,82,34],[48,88,48],[42,76,64],[38,60,30],[28,48,20],[96,50,58],[18,40,24]],
+   at:[56,72,54],ats:[0.55,0.9],amb:0.18,limb:0.16,
+   traits:["硫磺沉积层","火山喷气孔"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const vs=rnd(rand,5,10);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const base=fbm(n,nx*2.0+cf,ny*2.0,nz*2.0,5)*0.5+0.5;
+       ramp(p,base*0.8+0.1,tmp);
+       w(nx*vs+cf,ny*vs,nz*vs,wo);
+       const vent=1-smoothstep(0.02,0.20,wo[0]);
+       const crust=smoothstep(0.55,0.8,fbm(n,nx*3.6+9,ny*3.6,nz*3.6,4)*0.5+0.5);
+       mixc(tmp,p[5],crust*0.7,tmp);
+       mixc(tmp,p[6],smoothstep(0.35,0.12,base)*0.8,tmp);
+       const sh2=1-vent*0.4;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       const em=Math.pow(vent,1.4)*180;
+       mixc(tmp,p[3],vent*0.8,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=em;o[4]=crust*40;o[5]=0;
+     };
+   }},
+  {name:"酸雨侵蚀型",w:2,hs:24,
+   pal:[[80,64,28],[68,58,20],[56,52,34],[40,46,24],[30,38,18],[100,40,52],[22,34,22]],
+   at:[74,60,52],ats:[0.6,0.95],amb:0.19,limb:0.14,
+   traits:["持续酸雨侵蚀","溶蚀沟槽"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const gr=rnd(rand,3.0,6.0);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const warp=fbm(n,nx*1.2+cf,ny*1.2,nz*1.2,3);
+       const gut=smoothstep(0.66,0.92,ridged(n,nx*gr+warp*0.7+cf,ny*gr,nz*gr+warp*0.7,5));
+       const base=fbm(n,nx*2.2+cf,ny*2.2,nz*2.2,5)*0.5+0.5;
+       ramp(p,clamp01((base-0.5)*1.6+0.5),tmp);
+       const sh2=0.68+0.5*gut;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       mixc(tmp,p[6],gut*0.75,tmp);
+       mixc(tmp,p[5],smoothstep(0.8,0.95,base)*0.4,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=gut*30;o[4]=gut*90;o[5]=0;
+     };
+   }}
+  ]
+},
+
+/* ── 9. 气态巨行星 ─────────────────────────────── */
+gas:{
+  name:"气态巨行星",en:"JOVIAN",color:"#ffb870",weight:11,
+  meta:{dia:[68000,210000],dens:[0.22,0.45],temp:[-160,-40],rot:[6,18],orb:[800,5200],
+    atmos:["氢-氦（含氨云）","氢-氦-甲烷","氢-氦-硫化氢","氢-氦+金属氢层"],
+    res:["氦-3","氢","氨晶体","金属氢","氘"],hab:0},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"规则条带型",w:4,hs:28,
+   pal:[[28,52,26],[34,60,44],[20,50,58],[42,44,72],[10,40,34]],
+   at:[34,60,62],ats:[0.35,0.7],amb:0.09,limb:0.3,
+   traits:["流体表面无固态地壳","超音速带状急流","强大磁层"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const bands=rnd(rand,9,20),turbA=rnd(rand,0.7,1.4);
+     const storms=makeStorms(rand,rint(rand,1,4),0.72);
+     const spotCol=hsl2rgb(rnd(rand,350,380),rnd(rand,60,90),rnd(rand,34,50));
+     const whiteCol=hsl2rgb(40,rnd(rand,10,30),rnd(rand,80,95));
+     if(storms.some(s=>s.big))cfg.traits.push("巨型反气旋风暴");
+     return function(c,G,o){
+       applyStorms(storms,G.lon,G.lat,G);
+       const lat=G.lat,rc=Math.cos(lat);
+       const px=Math.cos(G.lon)*rc,py=Math.sin(lat),pz=Math.sin(G.lon)*rc;
+       const t1=turb(n,px*1.1+cf,py*1.1,pz*1.1,4);
+       const band=Math.sin(lat*bands+t1*turbA)*0.5+0.5;
+       const det=fbm(n,px*3.2+cf,py*26,pz*3.2,4)*0.5;
+       let t=clamp01(band*0.9+0.05+det*0.16);
+       t*=1-smoothstep(0.68,1.0,Math.abs(py))*0.38;
+       ramp(p,t,tmp);
+       if(G.storm>0){
+         const s=storms[G.stormId];
+         const k=smoothstep(0.05,0.55,G.storm);
+         mixc(tmp,s.big?spotCol:whiteCol,k*(s.big?0.92:0.8),tmp);
+       }
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=0;o[5]=0;
+     };
+   }},
+  {name:"湍流涡旋型",w:3,hs:30,
+   pal:[[210,40,22],[196,44,38],[186,50,52],[224,34,66],[200,30,30]],
+   at:[200,50,60],ats:[0.35,0.7],amb:0.09,limb:0.3,
+   traits:["流体表面无固态地壳","全域湍流涡旋","强大磁层"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const bands=rnd(rand,4,9),turbA=rnd(rand,2.0,3.4);
+     const storms=makeStorms(rand,rint(rand,5,10),0.8);
+     const whiteCol=hsl2rgb(rnd(rand,30,60),rnd(rand,20,40),rnd(rand,80,94));
+     return function(c,G,o){
+       applyStorms(storms,G.lon,G.lat,G);
+       const lat=G.lat,rc=Math.cos(lat);
+       const px=Math.cos(G.lon)*rc,py=Math.sin(lat),pz=Math.sin(G.lon)*rc;
+       const t1=turb(n,px*1.8+cf,py*1.8,pz*1.8,5);
+       const band=Math.sin(lat*bands+t1*turbA)*0.5+0.5;
+       const det=fbm(n,px*5.5+cf,py*20,pz*5.5,4)*0.5;
+       let t=clamp01(band*0.6+0.2+det*0.45+t1*0.12);
+       t*=1-smoothstep(0.7,1.0,Math.abs(py))*0.34;
+       ramp(p,t,tmp);
+       if(G.storm>0){
+         const k=smoothstep(0.05,0.5,G.storm);
+         mixc(tmp,whiteCol,k*0.75,tmp);
+       }
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=0;o[5]=0;
+     };
+   }},
+  {name:"大红斑型",w:3,hs:26,
+   pal:[[8,58,30],[16,64,44],[2,50,58],[30,52,72],[350,44,38]],
+   at:[12,62,60],ats:[0.4,0.75],amb:0.09,limb:0.3,
+   traits:["流体表面无固态地壳","巨型反气旋风暴","超音速带状急流"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const bands=rnd(rand,7,14);
+     const big={lon:rand()*TAU,lat:rnd(rand,-0.34,0.34),r:rnd(rand,0.26,0.4),swirl:rnd(rand,2.2,4)*(rand()<0.5?-1:1),big:true};
+     const others=makeStorms(rand,rint(rand,1,3),0.7);
+     const storms=[big].concat(others);
+     const spotCol=hsl2rgb(rnd(rand,2,26),rnd(rand,78,95),rnd(rand,40,54));
+     return function(c,G,o){
+       applyStorms(storms,G.lon,G.lat,G);
+       const lat=G.lat,rc=Math.cos(lat);
+       const px=Math.cos(G.lon)*rc,py=Math.sin(lat),pz=Math.sin(G.lon)*rc;
+       const t1=turb(n,px*1.2+cf,py*1.2,pz*1.2,4);
+       const band=Math.sin(lat*bands+t1*1.1)*0.5+0.5;
+       const det=fbm(n,px*3.4+cf,py*24,pz*3.4,4)*0.5;
+       let t=clamp01(band*0.86+0.07+det*0.2);
+       t*=1-smoothstep(0.7,1.0,Math.abs(py))*0.36;
+       ramp(p,t,tmp);
+       if(G.storm>0){
+         const s=storms[G.stormId];
+         const k=smoothstep(0.04,0.5,G.storm);
+         if(s.big)mixc(tmp,spotCol,k*0.95,tmp);
+         else mixc(tmp,p[4],k*0.6,tmp);
+       }
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=0;o[5]=0;
+     };
+   }},
+  {name:"柔和薄雾型",w:2,hs:24,
+   pal:[[46,36,24],[38,32,40],[52,28,56],[30,24,30],[44,40,70]],
+   at:[44,34,62],ats:[0.3,0.6],amb:0.11,limb:0.32,
+   traits:["流体表面无固态地壳","高层薄雾遮盖"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const bands=rnd(rand,2.5,5);
+     return function(c,G,o){
+       const lat=G.lat,rc=Math.cos(lat);
+       const px=Math.cos(G.lon)*rc,py=Math.sin(lat),pz=Math.sin(G.lon)*rc;
+       const t1=turb(n,px*0.9+cf,py*0.9,pz*0.9,4);
+       const band=Math.sin(lat*bands+t1*0.8)*0.5+0.5;
+       const haze=fbm(n,px*1.6+cf,py*1.6,pz*1.6,5)*0.5+0.5;
+       let t=clamp01(band*0.42+haze*0.5+0.1);
+       t*=1-smoothstep(0.6,1.0,Math.abs(py))*0.3;
+       ramp(p,t,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=0;o[5]=0;
+     };
+   }}
+  ]
+},
+
+/* ── 10. 冰巨星 ────────────────────────────────── */
+icegiant:{
+  name:"冰巨星",en:"NEPTUNIAN",color:"#5ad8ff",weight:8,
+  meta:{dia:[32000,78000],dens:[0.28,0.52],temp:[-220,-150],rot:[8,22],orb:[1600,9800],
+    atmos:["氢-氦-甲烷","水-氨-甲烷『冰』混合物","氢-氦+深层离子水","氦-甲烷"],
+    res:["氦-3","甲烷","氨","重水","氢"],hab:0},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"静谧条纹型",w:3,hs:18,
+   pal:[[196,68,20],[190,72,34],[184,66,48],[200,58,66],[210,44,84],[176,60,26],[226,50,70]],
+   at:[196,80,64],ats:[0.5,0.85],amb:0.12,limb:0.32,
+   traits:["甲烷吸收红光呈蓝色","内部离子水层"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const bands=rnd(rand,3,7);
+     const storms=makeStorms(rand,rint(rand,0,2),0.8);
+     const spot=hsl2rgb(210,rnd(rand,40,60),rnd(rand,70,84));
+     return function(c,G,o){
+       applyStorms(storms,G.lon,G.lat,G);
+       const lat=G.lat,rc=Math.cos(lat);
+       const px=Math.cos(G.lon)*rc,py=Math.sin(lat),pz=Math.sin(G.lon)*rc;
+       const t1=fbm(n,px*1.3+cf,py*1.3,pz*1.3,4);
+       const band=Math.sin(lat*bands+t1*1.6)*0.5+0.5;
+       const det=fbm(n,px*2.2+cf,py*14,pz*2.2,4)*0.5;
+       let t=clamp01(band*0.7+0.18+det*0.14);
+       ramp(p,t,tmp);
+       mixc(tmp,p[5],smoothstep(0.80,0.97,Math.abs(py))*0.75,tmp);
+       if(G.storm>0)mixc(tmp,spot,smoothstep(0.05,0.5,G.storm)*0.7,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=0;o[5]=0;
+     };
+   }},
+  {name:"极涡型",w:3,hs:16,
+   pal:[[204,64,18],[198,70,32],[192,64,46],[210,52,62],[220,40,84],[184,56,24],[230,44,74]],
+   at:[200,78,66],ats:[0.55,0.9],amb:0.12,limb:0.34,
+   traits:["甲烷吸收红光呈蓝色","双极涡旋"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const bands=rnd(rand,2,5);
+     const storms=makeStorms(rand,rint(rand,1,3),0.85);
+     const dark=hsl2rgb(202,rnd(rand,60,80),rnd(rand,16,26));
+     return function(c,G,o){
+       applyStorms(storms,G.lon,G.lat,G);
+       const lat=G.lat,rc=Math.cos(lat);
+       const px=Math.cos(G.lon)*rc,py=Math.sin(lat),pz=Math.sin(G.lon)*rc;
+       const t1=fbm(n,px*1.2+cf,py*1.2,pz*1.2,4);
+       const band=Math.sin(lat*bands+t1*1.3)*0.5+0.5;
+       const det=fbm(n,px*2.6+cf,py*16,pz*2.6,4)*0.5;
+       let t=clamp01(band*0.66+0.2+det*0.16);
+       ramp(p,t,tmp);
+       // 极涡：绕极点的螺旋
+       const pv=smoothstep(0.62,0.95,Math.abs(py));
+       const spin=Math.sin(Math.atan2(pz,px)*2+Math.abs(py)*9)*0.5+0.5;
+       mixc(tmp,p[6],pv*spin*0.8,tmp);
+       mixc(tmp,dark,pv*(1-spin)*0.6,tmp);
+       if(G.storm>0)mixc(tmp,dark,smoothstep(0.05,0.5,G.storm)*0.85,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=0;o[5]=0;
+     };
+   }},
+  {name:"风暴条纹型",w:2,hs:20,
+   pal:[[190,72,18],[186,76,30],[180,70,44],[200,60,62],[214,46,82],[176,64,24],[224,52,72]],
+   at:[192,82,62],ats:[0.5,0.9],amb:0.12,limb:0.3,
+   traits:["甲烷吸收红光呈蓝色","超音速风暴","白色风暴链"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const bands=rnd(rand,5,11);
+     const storms=makeStorms(rand,rint(rand,4,9),0.85);
+     const white=hsl2rgb(rnd(rand,190,215),rnd(rand,20,40),rnd(rand,86,96));
+     return function(c,G,o){
+       applyStorms(storms,G.lon,G.lat,G);
+       const lat=G.lat,rc=Math.cos(lat);
+       const px=Math.cos(G.lon)*rc,py=Math.sin(lat),pz=Math.sin(G.lon)*rc;
+       const t1=turb(n,px*1.6+cf,py*1.6,pz*1.6,4);
+       const band=Math.sin(lat*bands+t1*2.0)*0.5+0.5;
+       const streak=fbm(n,px*2.0+cf,py*30,pz*2.0,3)*0.5;
+       let t=clamp01(band*0.7+0.16+streak*0.3+t1*0.1);
+       ramp(p,t,tmp);
+       if(G.storm>0)mixc(tmp,white,smoothstep(0.05,0.5,G.storm)*0.85,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=0;o[5]=0;
+     };
+   }}
+  ]
+},
+
+/* ── 11. 机械造物（科幻） ──────────────────────── */
+metal:{
+  name:"机械造物天体",en:"MECHANOS",color:"#9fd8ff",weight:5,
+  meta:{dia:[3600,32000],dens:[0.9,2.6],temp:[-140,180],rot:[4,120],orb:[10,1800],
+    atmos:["人工大气（可控）","无大气（真空）","冷却剂蒸气","电离气体外壳"],
+    res:["合金外壳","核聚变燃料","纳米机械群","废弃电路稀土","超导材料"],hab:4},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"装甲板型",w:3,hs:22,
+   pal:[[210,10,26],[208,8,42],[204,6,58],[212,12,72],[200,16,34],[196,40,44],[190,60,60]],
+   at:[190,50,60],ats:[0.1,0.35],amb:0.14,limb:0.22,
+   traits:["人造壳体结构","模块化外壳"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const Nu=rint(rand,16,54),Nv=Math.floor(Nu/2);
+     const glowCol=hsl2rgb(rnd(rand,170,200),90,rnd(rand,55,72));
+     const hasSea=chance(rand,0.4),panelVar=rnd(rand,0.1,0.3);
+     if(hasSea)cfg.traits.push("冷却剂循环海");
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const gu=G.u*Nu,gv=G.v*Nv;
+       const fu=Math.abs((gu%1)-0.5)*2,fv=Math.abs((gv%1)-0.5)*2;
+       const seam=smoothstep(0.74,0.97,Math.max(fu,fv));
+       const plate=fbm(n,nx*1.7+cf,ny*1.7,nz*1.7,4)*0.5+0.5;
+       const cid=n(Math.floor(gu)*3.7+cf,Math.floor(gv)*3.7,11.5);
+       ramp(p,plate*0.45+0.28+cid*panelVar,tmp);
+       const grime=fbm(n,nx*5+cf,ny*5,nz*5,4)*0.5+0.5;
+       tmp[0]*=0.82+grime*0.36;tmp[1]*=0.82+grime*0.36;tmp[2]*=0.82+grime*0.36;
+       tmp[0]*=1-seam*0.62;tmp[1]*=1-seam*0.62;tmp[2]*=1-seam*0.62;
+       let em=0,sp=90;
+       if(cid>0.08)em=seam*(cid-0.08)/0.5*255;
+       if(hasSea){
+         const s=smoothstep(0.62,0.76,fbm(n,nx*1.3+33,ny*1.3,nz*1.3,3)*0.5+0.5);
+         mixc(tmp,p[6],s*0.85,tmp);
+         sp=Math.max(sp*(1-s),40);em*=(1-s);
+       }
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=em;o[4]=sp;o[5]=0;
+       if(em>0){o[0]+=glowCol[0]*em/255*0.35;o[1]+=glowCol[1]*em/255*0.35;o[2]+=glowCol[2]*em/255*0.35;}
+     };
+   }},
+  {name:"电路板型",w:3,hs:26,
+   pal:[[132,72,14],[138,76,22],[126,64,10],[148,82,28],[118,56,8],[46,22,18],[176,80,56]],
+   at:[140,84,38],ats:[0.22,0.50],amb:0.13,limb:0.18,
+   traits:["印刷电路地表","导电迹线网络"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     // 网格密度（沿经纬网格：Nx 列、Ny 行）
+     const Nx=rint(rand,28,44);
+     const Ny=rint(rand,16,24);
+     /* ── 走线发光色（板载 LED / 通电信号） ── */
+     const glowCol=hsl2rgb(rnd(rand,90,160),95,rnd(rand,52,70));
+     /* ── 铜色走线 / 焊盘 ── */
+     const copper=hsl2rgb(rnd(rand,30,48),rnd(rand,82,98),rnd(rand,46,60));
+     /* ── 丝印白色 ── */
+     const silk=hsl2rgb(60,rnd(rand,6,16),rnd(rand,86,94));
+     /* ── 偶发指示灯高亮色 ── */
+     const hiLit=hsl2rgb(rnd(rand,20,200),rnd(rand,80,100),rnd(rand,55,72));
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const U=G.u*Nx, V=G.v*Ny;
+       const cu=Math.floor(U), cv=Math.floor(V);
+       const fu=U-cu, fv=V-cv;
+
+       /* ── 基础：阻焊层绿（油墨绿，带微纹理） ── */
+       const base=fbm(n,nx*1.4+cf,ny*1.4,nz*1.4,3)*0.5+0.5;
+       ramp(p,base*0.40+0.26,tmp);
+       const micro=fbm(n,nx*9.0+cf*1.3,ny*9.0,nz*9.0,3)*0.5+0.5;
+       tmp[0]*=0.86+micro*0.20;tmp[1]*=0.86+micro*0.20;tmp[2]*=0.86+micro*0.20;
+
+       /* ── 主走线（曼哈顿走线，强制正交） ──
+          用 cell hash 决定哪些行/列启用走线；
+          走线宽度 = cell 宽度的固定比例，硬边。 */
+       const hMask=n(cu*0.71+cf*0.13, cv*0.71+cf*0.13+11, 0.13)>0.05?1:0;
+       const vMask=n(cu*0.71+cf*0.13+22, cv*0.71+cf*0.13, 0.71)>0.05?1:0;
+       const mainH=hMask*smoothstep(0.04,0.015,Math.abs(fv-0.5));
+       const mainV=vMask*smoothstep(0.04,0.015,Math.abs(fu-0.5));
+
+       /* ── 次级走线（更细、更窄） ── */
+       const fineHN=n(cu*0.91+cf*0.31+7, cv*0.91+cf*0.31, 1.31);
+       const fineVN=n(cu*0.91+cf*0.31, cv*0.91+cf*0.31+7, 1.91);
+       const fineH=fineHN>0.40?smoothstep(0.010,0.005,Math.abs(fv-0.25)):0;
+       const fineV=fineVN>0.40?smoothstep(0.010,0.005,Math.abs(fu-0.25)):0;
+
+       /* ── 焊盘 / 过孔 ── */
+       const viaOn=n(cu*0.83+cf*0.13, cv*0.83+cf*0.13, 0.51)>0.42?1:0;
+       const viaD=Math.sqrt((fu-0.5)*(fu-0.5)+(fv-0.5)*(fv-0.5));
+       const via=viaOn*smoothstep(0.14,0.07,viaD);
+       const viaRing=viaOn*(smoothstep(0.16,0.14,viaD)-smoothstep(0.13,0.10,viaD));
+
+       /* ── 元器件焊盘（锚点定位，保证多 cell 元器件一致）──
+          用 anchor block 的 hash 决定元器件位置与尺寸；
+          所有组成 cell 通过 anchor 查到同一组属性。 */
+       // anchor：以 2x1 block 为单位（成对 cell），锚点行 = cv
+       const anchorX=Math.floor(cu/2)*2;
+       const anchorY=cv;
+       const aSeed=n(anchorX*0.91+cf*0.31+33, anchorY*0.91+cf*0.31, 0.83);
+       const aShape=n(anchorX*0.91+cf*0.31, anchorY*0.91+cf*0.31+33, 1.73);
+       const aSeedNext=n(anchorX*0.91+cf*0.31+33, (anchorY+1)*0.91+cf*0.31, 0.83);
+       const compW=(aShape>0.55)?2:1;
+       const compH=(aShape<-0.20 && aSeedNext>0.45)?2:1;
+       // 当前 cell 是否属于某元器件
+       const inFirstRow=cu===anchorX || cu===anchorX+1;
+       const inSecondRow=compH===2 && cu===anchorX && cv===anchorY+1;
+       const inSecondRowR=compH===2 && cu===anchorX+1 && cv===anchorY+1;
+       const isComp=aSeed>0.58 && (inFirstRow || inSecondRow || inSecondRowR);
+       // 像素在元器件内的相对位置（lx∈[0,compW), ly∈[0,compH)）
+       const lx=fu+(cu-anchorX);
+       const ly=((cv===anchorY+1) && compH===2)?1+fv:fv;
+       const dx=Math.min(lx, compW-lx), dy=Math.min(ly, compH-ly);
+       const padEdge=Math.min(dx, dy);
+       // 焊盘主体：内部实心，边缘抗锯齿
+       const comp=isComp?smoothstep(0.02,0.10,padEdge):0;
+       // 焊盘中心略亮（凸起感）
+       const compCore=isComp?smoothstep(0.18,0.28,padEdge):0;
+       // 焊盘内边缘细暗带
+       const compRim=isComp?Math.max(0,smoothstep(0.08,0.10,padEdge)-smoothstep(0.10,0.13,padEdge)):0;
+
+       /* ── 丝印：每个元器件附近的白色标记（小圆点）── */
+       const silkSeed=n(cu*1.5+cf*0.7, cv*1.5+cf*0.7, 1.51);
+       const silkD=Math.sqrt((fu-0.86)*(fu-0.86)+(fv-0.14)*(fv-0.14));
+       const sil=silkSeed>0.30&&silkD<0.06?smoothstep(0.06,0.02,silkD)*0.7:0;
+
+       /* ── 合成覆层（铜色：走线、过孔、SMD 焊盘）── */
+       const metal=Math.max(mainH,mainV,fineH,fineV,via,comp*0.85);
+       if(metal>0)mixc(tmp,copper,metal*0.82,tmp);
+       // 过孔焊环（银白色）
+       if(viaRing>0)mixc(tmp,silk,viaRing*0.55,tmp);
+       // 元器件焊盘芯（浅镀锡）
+       if(compCore>0)mixc(tmp,silk,compCore*0.45,tmp);
+       // 元器件边缘暗框
+       if(compRim>0){
+         tmp[0]*=1-compRim*0.55;tmp[1]*=1-compRim*0.55;tmp[2]*=1-compRim*0.55;
+       }
+       // 丝印白
+       if(sil>0)mixc(tmp,silk,sil,tmp);
+
+       /* ── 发光：通电的走线 / 过孔 / 偶发指示灯 ── */
+       const live=Math.max(mainH*0.85,mainV*0.85,via*0.7);
+       const em=clamp01(live+fineH*0.35+fineV*0.35)*225;
+       // 偶发指示灯：极少数元器件中心点亮
+       const ledOn=isComp&&aSeed>0.92&&cu===anchorX;
+       const ledD=Math.sqrt((fu-0.5)*(fu-0.5)+(fv-0.5)*(fv-0.5));
+       const blink=ledOn?smoothstep(0.10,0.02,ledD)*180:0;
+       tmp[0]+=glowCol[0]*em/255*0.55+hiLit[0]*blink/255*0.4;
+       tmp[1]+=glowCol[1]*em/255*0.55+hiLit[1]*blink/255*0.4;
+       tmp[2]+=glowCol[2]*em/255*0.55+hiLit[2]*blink/255*0.4;
+
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=em+blink;o[4]=58+metal*135;o[5]=0;
+     };
+   }},
+  {name:"管道环带型",w:3,hs:20,
+   pal:[[204,12,24],[200,10,38],[196,8,52],[210,14,68],[190,18,32],[30,44,40],[186,66,62]],
+   at:[196,46,58],ats:[0.12,0.34],amb:0.14,limb:0.22,
+   traits:["环绕管道网","冷却回路"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     let Nu=rint(rand,20,44);if(Nu%2)Nu++;
+     const Nv=rint(rand,8,20);
+     const glowCol=hsl2rgb(rnd(rand,180,215),90,rnd(rand,55,72));
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const rib=Math.abs(Math.sin(G.v*Math.PI*Nv));
+       const pipe=Math.abs(Math.sin(G.u*Math.PI*Nu));
+       const ribL=smoothstep(0.88,1.0,rib),pipeL=smoothstep(0.90,1.0,pipe);
+       const tube=smoothstep(0.55,0.95,rib)*0.7+0.3;
+       const plate=fbm(n,nx*1.9+cf,ny*1.9,nz*1.9,4)*0.5+0.5;
+       ramp(p,plate*0.55+0.1+pipe*0.14,tmp);
+       const rust=fbm(n,nx*4.4+13,ny*4.4,nz*4.4,4)*0.5+0.5;
+       tmp[0]*=0.84+rust*0.32;tmp[1]*=0.84+rust*0.32;tmp[2]*=0.84+rust*0.32;
+       tmp[0]*=1-ribL*0.5;tmp[1]*=1-ribL*0.5;tmp[2]*=1-ribL*0.5;
+       mixc(tmp,p[5],clamp01(ribL*0.8+pipeL*0.6),tmp);
+       const em=clamp01(ribL*0.9+pipeL*0.5)*225;
+       mixc(tmp,p[6],em/255*0.75,tmp);
+       tmp[0]+=glowCol[0]*em/255*0.3;tmp[1]+=glowCol[1]*em/255*0.3;tmp[2]+=glowCol[2]*em/255*0.3;
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=em;o[4]=70+tube*90;o[5]=0;
+     };
+   }},
+  {name:"蜂窝单元型",w:3,hs:24,
+   pal:[[196,14,16],[192,12,26],[200,10,38],[188,16,52],[204,20,24],[36,50,36],[178,70,56]],
+   at:[196,44,56],ats:[0.1,0.3],amb:0.15,limb:0.2,
+   traits:["蜂窝式单元舱","分区环境控制"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const cs=rnd(rand,6,13);
+     const glowCol=hsl2rgb(rnd(rand,150,210),90,rnd(rand,52,72));
+     const lit=chance(rand,0.5)?rnd(rand,0.45,0.62):rnd(rand,0.2,0.4);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       w(nx*cs+cf,ny*cs,nz*cs,wo);
+       const f1=wo[0],f2=wo[1],id=wo[2];
+       const wall=1-smoothstep(0.02,0.10,f2-f1);     // 壁
+       const cell=smoothstep(0.06,0.22,f1);          // 内部
+       const dome=1-smoothstep(0.0,0.26,f1);
+       const plate=fbm(n,nx*2.2+cf,ny*2.2,nz*2.2,3)*0.5+0.5;
+       ramp(p,plate*0.42+0.14+id*0.12,tmp);
+       const sh2=0.36+0.62*cell+0.24*dome;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       mixc(tmp,p[5],wall*0.8,tmp);
+       const on=id>lit?1:0;
+       const em=clamp01(on*cell*0.9+wall*0.35)*230;
+       mixc(tmp,p[6],on*cell*0.6,tmp);
+       tmp[0]+=glowCol[0]*on*cell*0.22;tmp[1]+=glowCol[1]*on*cell*0.22;tmp[2]+=glowCol[2]*on*cell*0.22;
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=em;o[4]=50+cell*140;o[5]=0;
+     };
+   }},
+  {name:"破碎壳体型",w:2,hs:22,
+   pal:[[208,8,22],[204,6,36],[200,4,50],[212,10,64],[196,12,30],[28,60,40],[40,90,58]],
+   at:[200,40,54],ats:[0.12,0.36],amb:0.16,limb:0.2,
+   traits:["破损外壳","内部结构外露","熔毁内芯"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const ps=rnd(rand,3,7);
+     const coreCol=hsl2rgb(rnd(rand,16,44),95,rnd(rand,52,66));
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       w(nx*ps+cf,ny*ps,nz*ps,wo);
+       const f1=wo[0],f2=wo[1],id=wo[2];
+       const gap=smoothstep(0.02,0.20,f1);            // 0=缝隙 1=板内
+       const panel=smoothstep(0.20,0.42,f1);
+       const plate=fbm(n,nx*2.0+cf,ny*2.0,nz*2.0,4)*0.5+0.5;
+       ramp(p,plate*0.4+0.22+id*0.1,tmp);
+       const sh2=0.3+0.8*panel;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       // 缺失板块 → 露出熔融内芯
+       const missing=id<0.28?1:0;
+       const hole=missing*(1-smoothstep(0.0,0.12,f1));
+       const hot=fbm(n,nx*3.2+17,ny*3.2,nz*3.2,3)*0.5+0.5;
+       mixc(tmp,p[6],hole*0.95,tmp);
+       mixc(tmp,p[5],hole*hot*0.6,tmp);
+       const em=clamp01(hole*0.95+(1-gap)*0.25)*245;
+       tmp[0]+=coreCol[0]*hole*0.45;tmp[1]+=coreCol[1]*hole*0.45;tmp[2]+=coreCol[2]*hole*0.45;
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=em;o[4]=60+panel*90;o[5]=0;
+     };
+   }}
+  ]
+},
+
+/* ── 13. 生物质行星（幻想） ────────────────────── */
+organic:{
+  name:"生物质行星",en:"BIOSPHERE",color:"#ff7ad0",weight:5,
+  meta:{dia:[7400,19000],dens:[0.8,1.15],temp:[-20,70],rot:[12,300],orb:[150,1100],
+    atmos:["氧-孢子悬浮","甲烷-氨生物大气","含孢子的氮氧","腐殖质雾"],
+    res:["活性生物质","共生菌群","生物聚合物","神经毒素","酶制剂"],hab:32},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"菌丝脉络型",w:3,hs:30,
+   pal:[[318,42,20],[300,44,32],[286,38,44],[340,48,34],[96,36,26],[54,48,30],[16,50,26]],
+   at:[300,64,62],ats:[0.4,0.8],amb:0.1,limb:0.18,cloudP:0.4,cloudMul:1.2,
+   traits:["全球活体表面","行星级生命活动"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const spore=chance(rand,0.7),pores=chance(rand,0.6);
+     const sporeCol=hsl2rgb(rnd(rand,120,330),90,rnd(rand,62,80));
+     if(spore)cfg.traits.push("发光孢子云");
+     if(pores)cfg.traits.push("巨型呼吸气孔");
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const w1=fbm(n,nx*1.4+cf,ny*1.4,nz*1.4,3);
+       const h=fbm(n,nx*2.2+w1*0.9+cf,ny*2.2,nz*2.2+w1*0.9,5)*0.5+0.5;
+       ramp(p,clamp01((h-0.5)*1.7+0.5),tmp);
+       const vein=ridged(n,nx*5.2+cf,ny*5.2,nz*5.2,4);
+       mixc(tmp,p[6],smoothstep(0.66,0.9,vein)*0.75,tmp);
+       let em=0;
+       if(pores){
+         w(nx*3.1,ny*3.1,nz*3.1,wo);
+         if(wo[0]<0.30){
+           const d=1-smoothstep(0.02,0.30,wo[0]);
+           mixc(tmp,p[0],d*0.85,tmp);em=Math.max(em,d*70);
+         }
+       }
+       if(spore){
+         w(nx*14+cf,ny*14,nz*14,wo);
+         if(wo[0]<0.16){
+           const d=1-smoothstep(0.02,0.16,wo[0]);
+           em=Math.max(em,d*225);
+           tmp[0]+=sporeCol[0]*d*0.3;tmp[1]+=sporeCol[1]*d*0.3;tmp[2]+=sporeCol[2]*d*0.3;
+         }
+       }
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=em;o[4]=h*45;
+       o[5]=cfg.hasCloud?smoothstep(0.56,0.78,fbm(n,nx*2.9+5,ny*2.9,nz*2.9,4)*0.5+0.5)*130:0;
+     };
+   }},
+  {name:"细胞组织型",w:3,hs:28,
+   pal:[[344,44,24],[328,48,34],[310,42,44],[292,38,34],[270,36,26],[14,44,28],[36,50,36]],
+   at:[330,60,60],ats:[0.45,0.85],amb:0.11,limb:0.16,cloudP:0.35,cloudMul:1.15,
+   traits:["细胞状组织表面","半透明质膜"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const cs=rnd(rand,4,10);
+     const nucleus=hsl2rgb(rnd(rand,300,350),rnd(rand,60,85),rnd(rand,20,34));
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       w(nx*cs+cf,ny*cs,nz*cs,wo);
+       const f1=wo[0],f2=wo[1],id=wo[2];
+       const memb=1-smoothstep(0.01,0.09,f2-f1);   // 细胞膜
+       const nuc=1-smoothstep(0.04,0.24,f1);       // 细胞核
+       const cyto=smoothstep(0.10,0.34,f1);
+       const base=fbm(n,nx*2.4+cf,ny*2.4,nz*2.4,4)*0.5+0.5;
+       ramp(p,base*0.5+0.25+id*0.15,tmp);
+       const sh2=0.55+0.6*cyto+0.3*memb;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       mixc(tmp,nucleus,nuc*0.85,tmp);
+       mixc(tmp,p[6],memb*0.7,tmp);
+       const em=Math.pow(nuc,1.5)*90+Math.pow(memb,2)*40;
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=em;o[4]=40+cyto*120;
+       o[5]=cfg.hasCloud?smoothstep(0.58,0.8,fbm(n,nx*2.6+27,ny*2.6,nz*2.6,4)*0.5+0.5)*120:0;
+     };
+   }},
+  {name:"甲壳分节型",w:2,hs:26,
+   pal:[[26,40,22],[16,46,30],[8,42,40],[350,38,32],[338,34,44],[44,36,26],[58,30,52]],
+   at:[20,48,56],ats:[0.4,0.75],amb:0.1,limb:0.2,cloudP:0.3,cloudMul:1.1,
+   traits:["分节甲壳","几丁质外壳"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const seg=rnd(rand,6,14),cs=rnd(rand,8,18);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const segv=Math.abs(Math.sin(G.v*Math.PI*seg));
+       const joint=smoothstep(0.86,1.0,segv);
+       w(nx*cs+cf,ny*cs*0.6,nz*cs,wo);
+       const scale=smoothstep(0.01,0.10,wo[1]-wo[0]);
+       const base=fbm(n,nx*2.6+cf,ny*2.6,nz*2.6,4)*0.5+0.5;
+       ramp(p,base*0.55+0.2,tmp);
+       const sh2=0.5+0.7*segv+0.25*scale;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       mixc(tmp,p[5],joint*0.8,tmp);
+       mixc(tmp,p[6],scale*0.45,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=0;o[4]=30+segv*110;
+       o[5]=cfg.hasCloud?smoothstep(0.6,0.82,fbm(n,nx*2.8+41,ny*2.8,nz*2.8,4)*0.5+0.5)*115:0;
+     };
+   }}
+  ]
+},
+
+/* ── 14. 等离子能量体（科幻） ──────────────────── */
+plasma:{
+  name:"等离子能量体",en:"PLASMA",color:"#ff4fa8",weight:4,
+  meta:{dia:[9000,42000],dens:[0.05,0.3],temp:[2800,26000],rot:[3,40],orb:[20,900],
+    atmos:["等离子体外壳","磁约束等离子","无（纯能量态）","电离氢冕"],
+    res:["高能等离子","反物质痕量","磁能","稀有同位素"],hab:0},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"湍流电弧型",w:3,hs:40,
+   pal:[[280,60,6],[292,80,24],[316,90,44],[198,92,52],[172,96,68],[330,90,80],[48,96,86]],
+   at:[300,90,62],ats:[0.8,1.3],amb:0.42,limb:0.05,
+   traits:["纯能量态天体","强磁流体动力学","无固态表面"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const core=chance(rand,0.5);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const t1=turb(n,nx*1.1+cf,ny*1.1,nz*1.1,4);
+       const flow=ridged(n,nx*2.3+t1*0.8+cf,ny*2.3,nz*2.3+t1*0.8,5);
+       let e=smoothstep(0.44,0.86,flow);
+       const pulse=fbm(n,nx*1.6+cf,ny*1.6,nz*1.6,3)*0.5+0.5;
+       e=clamp01(e*0.8+pulse*0.28-0.06);
+       if(core)e=Math.max(e,smoothstep(0.55,0.85,pulse)*0.9);
+       ramp(p,e,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=Math.pow(e,1.05)*248;o[4]=0;o[5]=0;
+     };
+   }},
+  {name:"冕环型",w:3,hs:36,
+   pal:[[268,70,8],[284,88,24],[302,92,42],[196,90,52],[176,92,70],[326,88,78],[42,94,88]],
+   at:[292,88,60],ats:[0.75,1.25],amb:0.4,limb:0.06,
+   traits:["磁力线冕环","环形等离子流"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const loops=rnd(rand,6,16);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const warp=fbm(n,nx*1.3+cf,ny*1.3,nz*1.3,3);
+       const arc=Math.sin(Math.abs(ny)*loops*Math.PI+warp*3)*0.5+0.5;
+       const loop=smoothstep(0.78,0.99,arc);
+       const base=turb(n,nx*1.5+cf,ny*1.5,nz*1.5,4)*0.5+0.5;
+       const e=clamp01(base*0.45+loop*0.6);
+       ramp(p,e,tmp);
+       mixc(tmp,p[6],Math.pow(loop,2)*0.8,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=Math.pow(e,1.1)*245;o[4]=0;o[5]=0;
+     };
+   }},
+  {name:"脉动核心型",w:2,hs:40,
+   pal:[[300,64,6],[318,86,22],[340,94,44],[20,92,54],[46,96,72],[280,90,80],[56,98,88]],
+   at:[320,92,62],ats:[0.85,1.35],amb:0.45,limb:0.04,
+   traits:["同心能量脉动","中心聚变核"],
+   build(rand,cfg,p){
+     const n=cfg.noise,cf=rnd(rand,0,50);
+     const rings=rnd(rand,10,26);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const warp=fbm(n,nx*1.1+cf,ny*1.1,nz*1.1,3);
+       const rad=Math.sqrt(nx*nx+ny*ny+nz*nz);
+       const ripple=Math.sin(rad*rings*Math.PI+warp*5)*0.5+0.5;
+       const hot=1-smoothstep(0.0,0.55,fbm(n,nx*1.7+cf,ny*1.7,nz*1.7,4)*0.5+0.5);
+       const e=clamp01(ripple*0.55+hot*0.55);
+       ramp(p,e,tmp);
+       mixc(tmp,p[6],Math.pow(smoothstep(0.85,1.0,ripple),1.5)*0.85,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=Math.pow(e,1.0)*250;o[4]=0;o[5]=0;
+     };
+   }}
+  ]
+},
+
+/* ── 15. 恒星 / 褐矮星（彩蛋） ─────────────────── */
+star:{
+  name:"恒星 / 褐矮星",en:"STELLAR",color:"#ffd24f",weight:3,
+  meta:{dia:[120000,900000],dens:[0.05,0.8],temp:[1800,32000],rot:[40,900],orb:[0,0],
+    atmos:["氢-氦等离子光球","电离金属谱线","分子云包层","日冕物质抛射"],
+    res:["聚变燃料","高能辐射","恒星风","等离子体"],hab:0},
+  init(rand,cfg){initSub(this,rand,cfg,cfg.subIndex);},
+  subs:[
+  {name:"米粒组织型",w:3,hs:16,
+   pal:[[16,86,18],[26,92,34],[36,94,52],[46,92,70],[52,80,88],[20,80,10],[58,60,98]],
+   at:[28,95,58],ats:[1.1,1.7],amb:0.26,limb:0.62,
+   traits:["自发光等离子体球","核聚变核心"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const gs=rnd(rand,14,30),spots=chance(rand,0.7);
+     if(spots)cfg.traits.push("星斑活动周期");
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       w(nx*gs,ny*gs,nz*gs,wo);
+       const gran=clamp01(1-wo[0]*2.2);
+       const conv=fbm(n,nx*2.6+cf,ny*2.6,nz*2.6,4)*0.5+0.5;
+       let t=clamp01(conv*0.62+gran*0.42-0.05);
+       if(spots){
+         const sp=smoothstep(0.60,0.76,fbm(n,nx*3.4+cf+40,ny*3.4,nz*3.4,3)*0.5+0.5);
+         t*=1-sp*0.82;
+       }
+       ramp(p,t,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=150+72*t;o[4]=0;o[5]=0;
+     };
+   }},
+  {name:"黑子群型",w:3,hs:18,
+   pal:[[30,88,20],[38,92,36],[46,90,54],[54,84,72],[58,72,90],[24,84,12],[60,50,96]],
+   at:[34,92,56],ats:[1.0,1.6],amb:0.26,limb:0.6,
+   traits:["自发光等离子体球","大型黑子群","强耀斑活动"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const gs=rnd(rand,10,20),ss=rnd(rand,2.6,5);
+     const umbra=hsl2rgb(rnd(rand,20,40),70,rnd(rand,6,14));
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       w(nx*gs,ny*gs,nz*gs,wo);
+       const gran=clamp01(1-wo[0]*2.2);
+       const conv=fbm(n,nx*2.6+cf,ny*2.6,nz*2.6,4)*0.5+0.5;
+       let t=clamp01(conv*0.6+gran*0.44-0.05);
+       w(nx*ss+cf,ny*ss,nz*ss,wo);
+       const sp=1-smoothstep(0.10,0.34,wo[0]);
+       const pen=1-smoothstep(0.34,0.52,wo[0]);
+       t*=1-pen*0.45;
+       ramp(p,t,tmp);
+       mixc(tmp,umbra,sp*0.92,tmp);
+       const flare=smoothstep(0.86,0.98,ridged(n,nx*6+cf,ny*6,nz*6,3));
+       mixc(tmp,p[6],flare*0.8,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=(150+72*t)*(1-sp*0.85)+flare*60;o[4]=0;o[5]=0;
+     };
+   }},
+  {name:"对流条纹型",w:2,hs:20,
+   pal:[[40,82,22],[48,86,38],[54,88,56],[58,80,74],[60,66,90],[36,80,14],[62,44,96]],
+   at:[44,88,58],ats:[1.05,1.65],amb:0.27,limb:0.58,
+   traits:["自发光等离子体球","带状对流环"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const bands=rnd(rand,6,16),cs=rnd(rand,8,18);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       const warp=fbm(n,nx*1.2+cf,ny*1.2,nz*1.2,3);
+       const band=Math.sin(ny*bands+warp*3)*0.5+0.5;
+       w(nx*cs+cf,ny*cs*0.35,nz*cs,wo);
+       const cell=clamp01(1-wo[0]*2.1);
+       const t=clamp01(band*0.5+cell*0.5);
+       ramp(p,t,tmp);
+       const sh2=0.86+0.3*cell;
+       tmp[0]*=sh2;tmp[1]*=sh2;tmp[2]*=sh2;
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=150+72*t;o[4]=0;o[5]=0;
+     };
+   }},
+  {name:"蓝巨星型",w:2,hs:14,
+   pal:[[210,80,16],[196,84,32],[186,80,52],[176,70,74],[168,50,90],[220,70,12],[200,30,98]],
+   at:[198,88,60],ats:[1.1,1.7],amb:0.28,limb:0.6,
+   traits:["自发光等离子体球","蓝白高温光球"],
+   build(rand,cfg,p){
+     const n=cfg.noise,w=cfg.worley,wo=cfg._wo,cf=rnd(rand,0,50);
+     const gs=rnd(rand,16,34);
+     return function(c,G,o){
+       const nx=G.nx,ny=G.ny,nz=G.nz;
+       w(nx*gs,ny*gs,nz*gs,wo);
+       const gran=clamp01(1-wo[0]*2.4);
+       const conv=fbm(n,nx*3.0+cf,ny*3.0,nz*3.0,4)*0.5+0.5;
+       const t=clamp01(conv*0.55+gran*0.5-0.05);
+       ramp(p,t,tmp);
+       const flare=smoothstep(0.8,0.97,ridged(n,nx*5+cf,ny*5,nz*5,3));
+       mixc(tmp,p[6],flare*0.7,tmp);
+       o[0]=tmp[0];o[1]=tmp[1];o[2]=tmp[2];o[3]=165+70*t;o[4]=0;o[5]=0;
+     };
+   }}
+  ]
+}
+};
+const BIOME_KEYS=Object.keys(BIOMES);
+
+/* ═══════════════════════════════════════════════════════════════
+   命名系统：5 套命名法 × 中文称号
+   ═══════════════════════════════════════════════════════════════ */
+const ONSETS=["k","t","v","z","x","th","dr","zh","m","n","s","l","r","b","g","p","sh","ch","kr","tr","vr","sk","tz","qu","ny","ph","gl","br","gr","sl","sn","zw","ts","hv","yl","aer","or","il","em","un","kl","fl","pl","pr","fr","cr","bl","cl","dl","gn","kh","str","spr","thr","wr","vl","sm","tw","dw","kn","lyr","ael","osc","umb","ign","vor","xan","zeph","kor","vyl","thal","myr","nyx"];
+const VOWELS=["a","e","i","o","u","ae","ai","au","ea","ia","oo","ua","ei","ou","y","ii","aa","eo","ya","uo","io","ao","eu","oe","aeo","iao","uaa","ye","yi","yo","ay","ey","oy","uya","aea","eia","oia"];
+const CODAS=["","","","","n","r","s","l","th","x","z","k","m","ng","sh","rr","ll","st","sk","rn","lt","ph","ss","nd","d","f","g","h","rt","rm","rk","ns","ls","mn","ct","ft","pt","ld","rd","mb","mp","nk","xt","ph","ch","dz","ks","ls","vn","ln","rn","ths","rk","sh","yn","yl","or","ar","ir","ur","el","al","os","us","is","ax","ex","ix","ox","ux"];
+const CATS=["Kepler","TRAPPIST","Gliese","HD","KOI","TOI","GJ","WASP","Proxima","LP","TYC","HR","PSR","NGTS","HATS","K2","WISE","HAT-P","CoRoT","OGLE","LHS","Ross","Wolf","Barnard","Luyten","Kapteyn","Tau","Eps","Lac","XO","Qatar","KELT","MASCARA","SPECULOOS","TESS","Gaia","2MASS","SDSS","HIP","BD","CD","CPD","ADS","WDS","NSV","PH"];
+const PLACES=["Ashford","Meridian","Vastitas","Hesperus","Corvus","Ironvale","Terminus","Haven","Persephone","Calderon","Dustbowl","Veridian","Oakhurst","Tharsis","Erebus","Solace","Brimstone","Halcyon","Novara","Kestrel","Falkland","Greyspire","Aldrin","Vance","Morwyn","Talos","Ithaca","Zephyr","Cindra","Norhaven","Emberfall","Quillon","Sablewood","Drakemoor","Lorwick","Veyra","Ostara","Nimbus","Carrow","Thessaly","Umbra","Valdore","Wynster","Aurelia","Blackreach","Cordelia","Duncairn","Elmsworth","Farrow","Grimhold","Hollowmere","Isvara","Jarnvik","Kilgrove","Lament","Myrefall","Nocturne","Orwald","Penumbras","Quorin","Ravenscar","Silverpine","Thornvale","Umberlight","Vantablack","Wraithmoor","Yarborough","Zephyria","Ashvale","Brightwater","Coldspring","Duskharbor","Eastmarch","Frostmere","Goldcrest","Highmourn","Ironquay","Jessamine","Kingsreach","Lowtide","Moonwrit","Northgate","Oldharbor","Palecliff","Quietfield","Redoubt","Stonehearth","Tidewatch","Underbough","Vespertine","Westlock","Yewshade"];
+const SUFFIX=["dor","ris","wyn","ara","ion","eth","ael","mir","thys","orra","und","yss","eon","alis","mor","vex","ax","ia","or","ys","une","ir","oth","arn","esh","ul","ant","ess","iad","orn","uve","yka","oz","ael","irn","ova","elia","urth","ynd","ossa","axa","emis","oryn","uvae","ynth","aria","eld","isq","orm","ynth","aelis","ovar","ydra","elth"];
+const ADJ=["灰烬","猩红","翡翠","静默","咆哮","破碎","永恒","被遗忘的","霜寒","熔火","幽蓝","黄金","虚空","苍白","暮光","铁锈","珍珠","剧毒","辉光","沉睡","狂乱","蔚蓝","暗金","结晶","无光","赤铜","苍翠","幽冥","虹彩","孤寂","燃烧","冰封","低语","高歌","流浪","锚定","腐朽","新生","暴虐","温驯","缄默","轰鸣","褪色","溢彩","凝滞","奔涌","倒悬","深潜","远望","近岸","无风","雷鸣","雾锁","盐蚀","苔覆","藤缠","骨白","血砂","墨黑","银灰","紫晶","琥珀","雾银","风暴","潮汐","日冕","星尘","月影","寒武","荒纪","元初","终焉","复归","离散","聚合","湮灭","烛照","塔尖","环带","散逸"];
+const NOUN=["守望者","深渊","摇篮","穹顶","回响","王座","荒原","之眼","熔炉","迷宫","边境","挽歌","圣所","裂隙","冠冕","低语","幻梦","残响","方舟","终末","花园","坟墓","灯塔","子宫","剧场","锚点","尘埃","风暴","漩涡","碑文","钟摆","锁链","帷幕","尘埃","火种","冰窖","镜面","航标","巢穴","根须","脉络","脉动","休眠","苏醒","漂流","坠亡","升格","沉降","屏障","裂痕","缝隙","咽喉","脊梁","骸骨","茧房","孵化","远征","折返","静默","轰鸣","余烬","初雪","末雨","长夜","永昼","群星","独月","双日","潮汐","季风","信标","回路","接口","原型","残章","全典","索引","注脚","附录","扉页"];
+const ROMAN=["Ⅰ","Ⅱ","Ⅲ","Ⅳ","Ⅴ","Ⅵ","Ⅶ","Ⅷ","Ⅸ","Ⅹ","Ⅺ","Ⅻ","ⅩⅢ","ⅩⅣ","ⅩⅤ","ⅩⅥ","ⅩⅦ","ⅩⅧ","ⅩⅨ","ⅩⅩ"];
+/* Chinese ordinal suffixes, appearing randomly alongside traditional names */
+const CNUM=["之一","之二","之三","之四","之五","初篇","续篇","终篇","上卷","下卷","壹","贰","叁","肆","伍","甲","乙","丙","丁","新","旧","前","后"];
+
+function syl(rand){
+  return pick(rand,ONSETS)+pick(rand,VOWELS)+pick(rand,CODAS);
+}
+function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+
+function makeNameOnce(rand,biome){
+  const style=pick(rand,["mythic","mythic","alien","catalog","colonial","fantasy"]);
+  let name="";
+  if(style==="mythic"){
+    const n=rint(rand,2,3);for(let i=0;i<n;i++)name+=syl(rand);
+    name=cap(name);
+    if(chance(rand,0.45))name+=" "+pick(rand,ROMAN);
+  }else if(style==="alien"){
+    const a=cap(syl(rand)),b=syl(rand);
+    name=a+(chance(rand,0.55)?"'":"")+(chance(rand,0.5)?cap(b):b);
+    if(chance(rand,0.22))name+=" "+cap(syl(rand));
+  }else if(style==="catalog"){
+    const c=pick(rand,CATS);
+    const num=chance(rand,0.3)?(rint(rand,100,9999)+"."+rint(rand,1,99)):rint(rand,100,9999);
+    name=c+(chance(rand,0.5)?" ":"-")+num;
+    name+=" "+String.fromCharCode(98+rint(rand,0,6));
+  }else if(style==="colonial"){
+    const p=pick(rand,PLACES);
+    name=pick(rand,["New "+p,"Port "+p,p+" Reach",p+" Station","Fort "+p,p+" Landing","New "+p+" Colony"]);
+  }else{
+    const n=rint(rand,2,3);for(let i=0;i<n;i++)name+=syl(rand);
+    name=cap(name)+pick(rand,SUFFIX);
+    if(chance(rand,0.28))name="The "+name;
+  }
+  const epi="「"+pick(rand,ADJ)+pick(rand,NOUN)+(chance(rand,0.35)?"·"+pick(rand,CNUM):"")+"」";
+  return {name:name,epi:epi,style:style};
+}
+/* 过滤过长 / 拗口的组合 */
+function genName(rand,biome){
+  let best=null;
+  for(let k=0;k<5;k++){
+    const r=makeNameOnce(rand,biome);
+    if(!best||r.name.length<best.name.length)best=r;
+    if(r.name.length<=12&&!/sss|nnn|rrr|lll|ttt|(.)\1\1/i.test(r.name))return r;
+  }
+  return best;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   档案数据生成：直径/质量/重力/温度/周期/资源
+   ═══════════════════════════════════════════════════════════════ */
+function genStats(rand,bm,traits){
+  const m=bm.meta;
+  const dia=Math.round(rnd(rand,m.dia[0],m.dia[1])/10)*10;
+  const dens=rnd(rand,m.dens[0],m.dens[1]);
+  const dr=dia/12742;
+  const mass=dens*Math.pow(dr,3);
+  const grav=mass/(dr*dr);
+  const temp=Math.round(rnd(rand,m.temp[0],m.temp[1]));
+  const rot=+rnd(rand,m.rot[0],m.rot[1]).toFixed(rotFmt(m.rot));
+  const orb=m.orb[1]>0?Math.round(rnd(rand,m.orb[0],m.orb[1])):0;
+  const atmos=pick(rand,m.atmos);
+  const res=pickMany(rand,m.res,rint(rand,2,Math.min(4,m.res.length)));
+  // 宜居：基础 - 温度偏离惩罚 - 随机
+  let hab=m.hab;
+  hab-=clamp(Math.abs(temp-15)/3.2,0,55);
+  hab+=rnd(rand,-8,10);
+  if(traits.some(t=>t.indexOf("辐射")>=0))hab-=14;
+  hab=Math.round(clamp(hab,0,99));
+  let haz=100-hab;
+  haz=Math.round(clamp(haz+rnd(rand,-6,8),1,100));
+  return {dia:dia,mass:mass,grav:grav,temp:temp,rot:rot,orb:orb,atmos:atmos,res:res,hab:hab,haz:haz};
+}
+function rotFmt(r){return r[1]<10?2:(r[1]<100?1:0);}
+function hazLabel(h){
+  if(h<20)return"极低 · I 级";if(h<40)return"低 · II 级";
+  if(h<60)return"中等 · III 级";if(h<80)return"高 · IV 级";return"极端 · V 级";
+}
+function habLabel(h){
+  if(h<10)return"不适宜居住";if(h<30)return"需全封闭基地";
+  if(h<55)return"需生命维持";if(h<75)return"可改造殖民地";return"类地宜居住";
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   星球合成主流程
+   ═══════════════════════════════════════════════════════════════ */
+let tmp=[0,0,0];
+let tmp2=[0,0,0];
+
+async function createPlanet(seedStr,onProg){
+  const [tkey,subIdx,salt]=parseSeed(seedStr);
+  const rand=makeRng(seedStr);
+  const bm=BIOMES[tkey]||BIOMES.terran;
+
+  const cosT=new Float32Array(TW),sinT=new Float32Array(TW);
+  for(let i=0;i<TW;i++){const a=(i+0.5)/TW*TAU;cosT[i]=Math.cos(a);sinT[i]=Math.sin(a);}
+
+  /* 域旋转 / 分形参数走独立 rng：不打乱主 rand 序列，
+     星球名、宜居指数、卫星等元数据不随之变化，只有纹理形状变 */
+  const frand=makeRng(seedStr+"|rot");
+  const cfg={
+    noise:rotNoise(makeNoise3D(makeRng(seedStr+"|n")),frand),
+    worley:rotWorley(makeWorley3D(makeRng(seedStr+"|w")),frand),
+    _prand:makeRng(seedStr+"|pal"),
+    _o:new Float32Array(6),_wo:new Float32Array(3),_ice:new Float32Array(1),
+    _cosT:cosT,_sinT:sinT,
+    _G:{nx:0,ny:0,nz:0,lat:0,lon:0,u:0,v:0,storm:0,stormId:0},
+    subIndex:subIdx,
+    traits:[]
+  };
+  bm.init(rand,cfg);
+
+  // 卫星
+  const moons=[];
+  const nm=chance(rand,0.72)?rint(rand,1,bm===BIOMES.gas?7:3):0;
+  for(let i=0;i<nm;i++){
+    let sz=rnd(rand,2.2,6.5),giant=false;
+    if(rand()<0.10){sz*=rnd(rand,1.9,2.7);giant=true;} /* 10% 偶发巨月 */
+    moons.push({
+      d:rnd(rand,1.35,2.6)+i*0.22,
+      sp:rnd(rand,0.06,0.3)/(1+i*0.4),
+      ph:rand()*TAU,
+      sz:sz,
+      col:hsl2rgb(rnd(rand,0,360),rnd(rand,6,32),rnd(rand,42,76)),
+      tilt:rnd(rand,0.15,0.7)*(rand()<0.5?-1:1),
+      giant:giant,
+      style:(rand()*4)|0,   /* 0 素面 1 陨击坑 2 条纹 3 环带 */
+      mt:rand()*TAU         /* 表面细节相位（坑位 / 条纹走向） */
+    });
+  }
+
+  const tex=await buildTextureAsync(cfg,onProg);
+
+  const st=genStats(rand,bm,cfg.traits);
+  st.moons=nm;
+
+  const traits=cfg.traits.slice();
+  if(nm===0)traits.push("无天然卫星");
+  else if(nm>3)traits.push("复杂卫星系");
+  if(st.rot>200)traits.push("潮汐锁定倾向");
+  if(rand()<0.16)traits.push("逆行自转");
+  if(st.grav>1.6)traits.push("高重力环境");
+  else if(st.grav<0.4)traits.push("低重力环境");
+
+  const nmz=genName(rand,bm);
+  const traitSet=Array.from(new Set(traits));
+  /* 自转方向由「逆行自转」词条决定，保证词条与实际观感一致：
+     spinDir=-1 顺行 —— 画面上的地貌向右走（绝大多数天体）
+     spinDir=+1 逆行 —— 地貌向左走 */
+  const retro=traitSet.includes("逆行自转");
+
+  return {
+    seed:seedStr,type:tkey,biome:bm,
+    sub:cfg.subName||"",subIndex:cfg.subIndex,
+    tex:tex,atmos:cfg.atmos,ambient:cfg.ambient,limb:cfg.limb,
+    hasCloud:cfg.hasCloud,cloudMul:cfg.cloudMul||1,
+    moons:moons,
+    name:nmz.name,epi:nmz.epi,
+    stats:st,traits:traitSet,
+    spinDir:retro?1:-1,
+    cloudDir:rand()<0.5?1:-1
+  };
+}
+/* 种子格式：类型[-亚型序号]-随机盐
+   例：metal-2-k3f9xq  → 机械造物 · 电路板型
+   旧格式 terran-k3f9xq 仍然可用（亚型随机） */
+function parseSeed(s){
+  const parts=String(s).split("-");
+  if(parts.length>=2&&BIOMES[parts[0]]){
+    let sub=null,salt=parts.slice(1).join("-");
+    if(parts.length>=3&&/^\d{1,2}$/.test(parts[1])){
+      sub=+parts[1];salt=parts.slice(2).join("-");
+    }
+    return [parts[0],sub,salt];
+  }
+  return ["terran",null,String(s)];
+}
+function newSeed(tkey,sub){
+  if(!tkey){
+    // 加权随机
+    let tot=0;for(const k of BIOME_KEYS)tot+=BIOMES[k].weight;
+    let r=Math.random()*tot;
+    for(const k of BIOME_KEYS){r-=BIOMES[k].weight;if(r<=0){tkey=k;break;}}
+  }
+  const salt=Math.random().toString(36).slice(2,7)+Math.random().toString(36).slice(2,5);
+  return tkey+(sub==null?"":"-"+sub)+"-"+salt;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   球面渲染：CPU 纹理生成 + WebGL2 着色器光照
+   ═══════════════════════════════════════════════════════════════ */
+/* 内部渲染半径：随分辨率档位等比放大（240 = 画布 900×640 下 1:1 像素密度） */
+let RR=240,RW=480;
+/* WebGL2 球面渲染器：CPU 生成的纹理上传为 GPU 采样器，
+   光照 / 大气 / 细节层级全部在片元着色器里逐像素算（原 LUT + 取样循环） */
+const pcv=document.createElement("canvas");
+const gl=pcv.getContext("webgl2",{alpha:true,antialias:false,preserveDrawingBuffer:false});
+function rebuildRenderTargets(){
+  RW=RR*2;
+  pcv.width=RW;pcv.height=RW;
+}
+rebuildRenderTargets();
+
+const GL_VS=`#version 300 es
+void main(){
+  vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));
+  gl_Position=vec4(p*2.0-1.0,0.0,1.0);
+}`;
+const GL_FS=`#version 300 es
+precision highp float;
+uniform sampler2D uTexA;   /* rgb=albedo  a=emissive */
+uniform sampler2D uTexB;   /* r=spec      g=cloud    */
+uniform float uRot,uRR,uAmb,uLimb,uAtmS,uHasCloud;
+uniform vec2 uTexWH;
+uniform vec3 uLight,uAtm;
+out vec4 fragColor;
+void main(){
+  float dy=(uRR-gl_FragCoord.y)/uRR;
+  float cp2=1.0-dy*dy;
+  if(cp2<=0.0)discard;
+  float cp=sqrt(cp2);
+  float dx=(gl_FragCoord.x-uRR)/uRR;
+  float s=dx/cp;
+  if(s<=-1.0||s>=1.0)discard;
+  float nz=sqrt(max(0.0,1.0-dx*dx-dy*dy));
+  float texW=uTexWH.x,texH=uTexWH.y;
+  float uu=fract(asin(s)/6.2831853+uRot)*texW;
+  float vv=min((0.5-asin(dy)/3.1415927)*texH,texH-1.0);
+  vec2 uv=vec2((uu+0.5)/texW,(vv+0.5)/texH);
+  /* 解析 LOD：正交投影下每个屏幕像素覆盖的纹素数随 |s| 与 1/cp 发散，
+     对应原 CPU 版的两级边缘降采样 */
+  float dH=texW/(6.2831853*cp*sqrt(max(1e-4,1.0-s*s)))/uRR;
+  float dV=texH/(3.1415927*cp)/uRR;
+  float lod=log2(max(1.0,max(dH,dV)));
+  vec4 A=textureLod(uTexA,uv,lod);
+  vec4 B=textureLod(uTexB,uv,lod);
+  vec3 n=vec3(dx,dy,nz);
+  float ndl=dot(n,uLight);
+  float lam=uAmb+(1.0-uAmb)*pow(clamp((ndl+0.12)/1.12,0.0,1.0),0.85);
+  float rr=1.0-nz;
+  float rim=pow(rr,2.6)*(0.25+0.75*clamp(ndl,0.0,1.0));
+  vec3 hv=normalize(vec3(uLight.xy,uLight.z+1.0));
+  float sd=clamp(dot(n,hv),0.0,1.0);
+  float spec=pow(sd,5.5)*clamp(ndl*3.0,0.0,1.0)*0.3;
+  float e=A.a*(1.0-uLimb*pow(rr,1.5));
+  float ee=e*e*0.4627451;
+  vec3 col=A.rgb*(lam+e*1.06)+vec3(ee+B.r*spec);
+  if(uHasCloud>0.5&&B.g>0.004)
+    col=mix(col,vec3(0.9803922,0.9882353,1.0)*(lam*1.06),B.g);
+  col+=uAtm*rim*uAtmS;
+  fragColor=vec4(clamp(col,0.0,1.0),1.0);
+}`;
+function glShader(type,src){
+  const sh=gl.createShader(type);gl.shaderSource(sh,src);gl.compileShader(sh);
+  if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(sh));
+  return sh;
+}
+const glProg=gl.createProgram();
+gl.attachShader(glProg,glShader(gl.VERTEX_SHADER,GL_VS));
+gl.attachShader(glProg,glShader(gl.FRAGMENT_SHADER,GL_FS));
+gl.linkProgram(glProg);
+if(!gl.getProgramParameter(glProg,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(glProg));
+const GLU={};
+for(const nm of["uRot","uRR","uAmb","uLimb","uAtmS","uHasCloud","uTexWH","uLight","uAtm","uTexA","uTexB"])
+  GLU[nm]=gl.getUniformLocation(glProg,nm);
+const glTexA=gl.createTexture(),glTexB=gl.createTexture();
+for(const t of[glTexA,glTexB]){
+  gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+}
+gl.uniform1i(GLU.uTexA,0);gl.uniform1i(GLU.uTexB,1);
+let glBoundTex=null;
+
+/* ───────── 星球分辨率档位 ─────────
+   三层必须同一个倍率一起走：只提画布输出，球面仍是 240 像素半径，放大后照样糊；
+   只提球面，纹理纹素又比像素粗，细节仍是空壳。代价是内存与合成耗时按 k² 增长 */
+const RES_STEPS=[
+  {k:1,  name:"标准", tex:"1024×512"},
+  {k:1.5,name:"高清", tex:"1536×768"},
+  {k:2,  name:"极致", tex:"2048×1024"}
+];
+let resIdx=0;
+function setResolution(i){
+  const st=RES_STEPS[i];
+  if(!st)return;
+  if(i===resIdx){$("resSel").value=String(resIdx);return;}
+  if(generating){$("resSel").value=String(resIdx);toast("合成中，稍后再切换分辨率");return;}
+  resIdx=i;
+  TW=Math.round(1024*st.k);TH=Math.round(512*st.k);
+  RR=Math.round(240*st.k);
+  rebuildRenderTargets();
+  OUT=st.k;
+  applyCanvasSize();
+  toast("分辨率 "+st.name+" · 纹理 "+TW+"×"+TH+" · 画布 "+Math.round(VW*OUT)+"×"+Math.round(VH*OUT));
+  /* 同一颗星按新分辨率重合成：种子与自转相位都保持，只是更清晰 */
+  if(CUR)safeGenerate(CUR.seed,{keepPhase:true,noCount:true});
+}
+window.__LIGHT={x:-0.6,y:-0.3,z:0.74};
+function setLight(angDeg,elevDeg){
+  const a=angDeg*PI/180,e=elevDeg*PI/180;
+  window.__LIGHT={x:Math.cos(e)*Math.sin(a),y:-Math.sin(e),z:Math.cos(e)*Math.cos(a)};
+}
+
+/* 纹理上传：alb+em 打包进一张 RGBA，spec+cld 打包进另一张，一次生成完整 mip 链 */
+function uploadSphereTexture(tex){
+  const n=tex.w*tex.h;
+  const a=new Uint8Array(n*4),b=new Uint8Array(n*4);
+  for(let i=0;i<n;i++){
+    const i3=i*3,i4=i<<2;
+    a[i4]=tex.alb[i3];a[i4+1]=tex.alb[i3+1];a[i4+2]=tex.alb[i3+2];a[i4+3]=tex.em[i];
+    b[i4]=tex.spec[i];b[i4+1]=tex.cld[i];
+  }
+  for(const[t,data]of[[glTexA,a],[glTexB,b]]){
+    gl.bindTexture(gl.TEXTURE_2D,t);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,tex.w,tex.h,0,gl.RGBA,gl.UNSIGNED_BYTE,data);
+    gl.generateMipmap(gl.TEXTURE_2D);
+  }
+  glBoundTex=tex;
+}
+function renderSphere(P,phase){
+  if(pcv.width!==RW){pcv.width=RW;pcv.height=RW;}
+  if(glBoundTex!==P.tex)uploadSphereTexture(P.tex);
+  gl.viewport(0,0,RW,RW);
+  gl.clearColor(0,0,0,0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(glProg);
+  gl.uniform1i(GLU.uTexA,0);gl.uniform1i(GLU.uTexB,1);
+  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,glTexA);
+  gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,glTexB);
+  const at=P.atmos.col,L=window.__LIGHT;
+  gl.uniform1f(GLU.uRot,phase);
+  gl.uniform1f(GLU.uRR,RR);
+  gl.uniform1f(GLU.uAmb,P.ambient);
+  gl.uniform1f(GLU.uLimb,P.limb);
+  gl.uniform1f(GLU.uAtmS,P.atmos.str);
+  gl.uniform1f(GLU.uHasCloud,P.hasCloud?1:0);
+  gl.uniform2f(GLU.uTexWH,P.tex.w,P.tex.h);
+  gl.uniform3f(GLU.uLight,L.x,L.y,L.z);
+  gl.uniform3f(GLU.uAtm,at[0]/255,at[1]/255,at[2]/255);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   背景：纯黑星空
+   ═══════════════════════════════════════════════════════════════ */
+const cv=document.getElementById("scene");
+const ctx=cv.getContext("2d");
+/* 逻辑坐标系固定 900×640：取景半径、卫星、光圈全部按它书写。
+   画布输出倍率 OUT 只改内部像素数与 ctx 缩放 ——
+   布局、取景、DOM 叠加层（角标 / 提示 / 内嵌控件）都不用跟着改 */
+const VW=900,VH=640;
+const CW=VW,CH=VH,CX=VW/2,CY=VH/2;
+let OUT=1;
+const bg=document.createElement("canvas");
+const bgx=bg.getContext("2d");
+const vpEl=document.querySelector(".viewport");
+/* 画布按可用空间等比缩放（上限 1:1，不放大以避免糊化），
+   保证横屏下整页无需滚动即可完整呈现；
+   OUT>1 时内部像素更多而 CSS 尺寸不变 → 高分屏下更锐 */
+function fitCanvas(){
+  const k=Math.min(vpEl.clientWidth/cv.width,vpEl.clientHeight/cv.height,1);
+  cv.style.width=Math.floor(cv.width*k)+"px";
+  cv.style.height=Math.floor(cv.height*k)+"px";
+}
+addEventListener("resize",fitCanvas);
+/* 输出倍率切换：重设内部像素 → 重置 ctx 状态 → 重设等比缩放 → 重绘星空 */
+function applyCanvasSize(){
+  cv.width=Math.round(VW*OUT);cv.height=Math.round(VH*OUT);
+  bg.width=cv.width;bg.height=cv.height;
+  ctx.setTransform(OUT,0,0,OUT,0,0);
+  bgx.setTransform(OUT,0,0,OUT,0,0);
+  fitCanvas();
+  drawBG();
+}
+
+const STARS=[];
+for(let i=0;i<360;i++){
+  STARS.push({x:Math.random()*CW,y:Math.random()*CH,r:Math.random()*0.95+0.25,
+    a:Math.random()*0.7+0.3,tw:Math.random()*TAU,sp:Math.random()*1.4+0.3,
+    c:Math.random()<0.12?"#cfe0ff":"#ffffff"});
+}
+function drawBG(){
+  bgx.clearRect(0,0,CW,CH);
+  bgx.fillStyle="#000";bgx.fillRect(0,0,CW,CH);
+  for(const s of STARS){
+    const a=s.a*(0.7+0.3*Math.sin(s.tw));
+    bgx.globalAlpha=a;bgx.fillStyle=s.c;
+    bgx.beginPath();bgx.arc(s.x,s.y,s.r,0,TAU);bgx.fill();
+  }
+  bgx.globalAlpha=1;
+}
+
+/* 大气外辉光 */
+function drawGlow(P,Rs){
+  const a=P.atmos.col,st=P.atmos.str;
+  ctx.save();
+  ctx.globalCompositeOperation="lighter";
+  ctx.translate(CX,CY);
+  const g=ctx.createRadialGradient(0,0,Rs*0.9,0,0,Rs*(1.35+st*0.55));
+  g.addColorStop(0,"rgba("+a[0]+","+a[1]+","+a[2]+","+(0.30*st)+")");
+  g.addColorStop(0.45,"rgba("+a[0]+","+a[1]+","+a[2]+","+(0.11*st)+")");
+  g.addColorStop(1,"rgba("+a[0]+","+a[1]+","+a[2]+",0)");
+  ctx.fillStyle=g;
+  ctx.beginPath();ctx.arc(0,0,Rs*(1.4+st*0.6),0,TAU);ctx.fill();
+  ctx.restore();
+}
+
+/* 卫星 */
+function drawMoons(P,Rs,t,front){
+  const L=window.__LIGHT;
+  /* 屏幕平面光向（与行星 LUT 同一 y 向下约定），供巨月明暗渐变定向 */
+  let lx=L.x,ly=L.y;
+  const ll=Math.sqrt(lx*lx+ly*ly);
+  if(ll<0.05){lx=0;ly=-1;}else{lx/=ll;ly/=ll;}
+  for(const m of P.moons){
+    const ph=m.ph+t*m.sp;
+    const sx=CX+Math.cos(ph)*Rs*m.d;
+    const sy=CY+Math.sin(ph)*Rs*m.d*m.tilt;
+    const z=Math.sin(ph);
+    if((z>0)!==front)continue;
+    const sz=Math.max(1.2,m.sz*(Rs/170));
+    const lit=clamp01(Math.cos(ph-0)*0.5+0.5)*0.6+0.4;
+    ctx.beginPath();ctx.arc(sx,sy,sz,0,TAU);
+    const c=m.col;
+    const k=0.35+0.65*clamp01((L.x*Math.cos(ph)+L.z*0.6)*0.5+0.6);
+    if(m.giant&&sz>=4){
+      /* 巨月：立体渲染 —— 平涂底色 + 表面细节，再乘一层径向明暗渐变
+         （亮面中心朝向光源、相位越暗高光越沉入暗侧），与星球的
+         Lambert 感观一致。细节不再受 z 门控：前后两圈观感连续，
+         跨越 z=0 时不会瞬间丢纹理 */
+      ctx.save();
+      ctx.beginPath();ctx.arc(sx,sy,sz,0,TAU);ctx.clip();
+      ctx.fillStyle="rgb("+c[0]+","+c[1]+","+c[2]+")";
+      ctx.fillRect(sx-sz,sy-sz,sz*2,sz*2);
+      if(m.style===1){          /* 陨击坑：暗坑盘 + 背光侧被照亮的内壁 */
+        const nc=2+Math.min(4,sz|0);
+        for(let j=0;j<nc;j++){
+          const a=m.mt*3.1+j*2.39996;
+          const rr=sz*(0.10+((j*37)%10)/38);
+          const ox=sx+Math.cos(a)*sz*0.55,oy=sy+Math.sin(a*1.7)*sz*0.55;
+          ctx.fillStyle="rgba(255,255,255,.04)";
+          ctx.beginPath();ctx.arc(ox-lx*rr*0.25,oy-ly*rr*0.25,rr*0.9,0,TAU);ctx.fill();
+          ctx.fillStyle="rgba(0,0,0,.08)";
+          ctx.beginPath();ctx.arc(ox,oy,rr,0,TAU);ctx.fill();
+        }
+      }else if(m.style===2){    /* 条纹 */
+        ctx.strokeStyle="rgba(0,0,0,.20)";
+        ctx.lineWidth=Math.max(1,sz*0.14);
+        for(let j=-1;j<=1;j++){
+          const oy=sy+j*sz*0.52;
+          ctx.beginPath();ctx.moveTo(sx-sz,oy);ctx.lineTo(sx+sz,oy);ctx.stroke();
+        }
+      }else if(m.style===3){    /* 环带 */
+        ctx.fillStyle="rgba(255,255,255,.14)";
+        ctx.fillRect(sx-sz,sy-sz*0.38,sz*2,sz*0.32);
+        ctx.fillStyle="rgba(0,0,0,.16)";
+        ctx.fillRect(sx-sz,sy+sz*0.06,sz*2,sz*0.26);
+      }
+      /* 立体明暗：乘法渐变（白=亮面不变色 → 深灰=暗面压暗） */
+      const off=sz*(0.30+(1-k)*0.95);
+      const b=Math.min(255,Math.round(255*Math.min(1,k*1.2)));
+      const d=Math.round(255*k*0.30);
+      const g=ctx.createRadialGradient(sx+lx*off,sy+ly*off,0,sx,sy,sz*1.15);
+      g.addColorStop(0,"rgb("+b+","+b+","+b+")");
+      g.addColorStop(0.6,"rgb("+Math.round(b*0.8)+","+Math.round(b*0.8)+","+Math.round(b*0.8)+")");
+      g.addColorStop(1,"rgb("+d+","+d+","+d+")");
+      ctx.globalCompositeOperation="multiply";
+      ctx.fillStyle=g;
+      ctx.fillRect(sx-sz,sy-sz,sz*2,sz*2);
+      ctx.globalCompositeOperation="source-over";
+      ctx.restore();
+      ctx.beginPath();ctx.arc(sx,sy,sz,0,TAU);
+      ctx.strokeStyle="rgba(255,255,255,.12)";ctx.lineWidth=1;ctx.stroke();
+      continue;
+    }
+    ctx.fillStyle="rgb("+(c[0]*k|0)+","+(c[1]*k|0)+","+(c[2]*k|0)+")";
+    ctx.fill();
+    if(z>0){
+      /* 表面细节：硬边平涂、无模糊（与整体美术一致），仅限朝向观察者一面 */
+      if(sz>=3.2&&m.style>0){
+        ctx.save();
+        ctx.beginPath();ctx.arc(sx,sy,sz,0,TAU);ctx.clip();
+        if(m.style===1){          /* 陨击坑 */
+          ctx.fillStyle="rgba(0,0,0,.18)";
+          for(let j=0;j<4;j++){
+            const a=m.mt*3.1+j*2.4;
+            const rr=sz*(0.14+((j*37)%10)/45);
+            ctx.beginPath();
+            ctx.arc(sx+Math.cos(a)*sz*0.52,sy+Math.sin(a*1.7)*sz*0.52,rr,0,TAU);
+            ctx.fill();
+          }
+        }else if(m.style===2){    /* 条纹 */
+          ctx.strokeStyle="rgba(0,0,0,.20)";
+          ctx.lineWidth=Math.max(1,sz*0.16);
+          for(let j=-1;j<=1;j++){
+            const oy=sy+j*sz*0.5;
+            ctx.beginPath();ctx.moveTo(sx-sz,oy);ctx.lineTo(sx+sz,oy);ctx.stroke();
+          }
+        }else if(m.style===3){    /* 环带 */
+          ctx.fillStyle="rgba(255,255,255,.16)";
+          ctx.fillRect(sx-sz,sy-sz*0.34,sz*2,sz*0.30);
+          ctx.fillStyle="rgba(0,0,0,.14)";
+          ctx.fillRect(sx-sz,sy+sz*0.06,sz*2,sz*0.26);
+        }
+        ctx.restore();
+      }
+      ctx.beginPath();ctx.arc(sx,sy,sz,0,TAU);
+      ctx.strokeStyle="rgba(255,255,255,.12)";ctx.lineWidth=1;ctx.stroke();
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   主循环
+   ═══════════════════════════════════════════════════════════════ */
+let CUR=null;
+let phase=0,cloudPhase=0,tSec=0;
+let zoom=1;
+let paused=false;
+/* 自转：每秒转过的圈数（0.04 ≈ 25 秒一圈），方向由星球自身的 spinDir 决定 */
+let rotSpeed=0.04;
+/* 光照出厂值：方位角 / 仰角，供「光照归位」按钮回位 */
+const LIGHT_DEF=-38,ELEV_DEF=18;
+let lightAng=LIGHT_DEF,elev=ELEV_DEF;
+let dragLight=false;
+let last=performance.now();
+
+const wrapDeg=d=>{let x=((d+180)%360+360)%360-180;return x;};
+
+function frame(now){
+  const dt=Math.min(80,now-last);last=now;
+  if(!paused)tSec+=dt;
+  if(CUR){
+    if(!paused){
+      phase+=rotSpeed*(dt/1000)*CUR.spinDir;
+      cloudPhase+=rotSpeed*(dt/1000)*CUR.cloudMul*CUR.cloudDir;
+      phase-=Math.floor(phase);cloudPhase-=Math.floor(cloudPhase);
+    }
+    for(const s of STARS)s.tw+=dt/1000*s.sp;
+    setLight(lightAng,elev);
+    const Rs=170*zoom;
+    ctx.clearRect(0,0,CW,CH);
+    ctx.drawImage(bg,0,0,CW,CH);
+    drawMoons(CUR,Rs,tSec/1000,false);
+    renderSphere(CUR,phase);
+    ctx.drawImage(pcv,CX-Rs,CY-Rs,Rs*2,Rs*2);
+    drawGlow(CUR,Rs);
+    drawMoons(CUR,Rs,tSec/1000,true);
+    drawLightGizmo(Rs,dragLight);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* 光源方向指示器：始终显示一个淡淡的「太阳」标记，
+   拖动 / 巡航时高亮并标注角度，让拖动操作有即时反馈 */
+function drawLightGizmo(Rs,active){
+  const L=window.__LIGHT;
+  const sx=CX+L.x*Rs*1.78,sy=CY+L.y*Rs*1.78;
+  ctx.save();
+  if(active){
+    ctx.setLineDash([3,5]);ctx.strokeStyle="rgba(255,225,150,.34)";ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(CX+L.x*Rs*1.06,CY+L.y*Rs*1.06);ctx.lineTo(sx,sy);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  const rad=active?17:11,a=active?0.6:0.26;
+  const g=ctx.createRadialGradient(sx,sy,0,sx,sy,rad);
+  g.addColorStop(0,"rgba(255,240,190,"+a+")");
+  g.addColorStop(0.4,"rgba(255,200,90,"+(a*0.42)+")");
+  g.addColorStop(1,"rgba(255,180,60,0)");
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(sx,sy,rad,0,TAU);ctx.fill();
+  ctx.fillStyle="rgba(255,244,214,"+(active?0.95:0.5)+")";
+  ctx.beginPath();ctx.arc(sx,sy,active?3.8:2.6,0,TAU);ctx.fill();
+  if(active){
+    ctx.font='11px ui-monospace,SFMono-Regular,Consolas,monospace';
+    ctx.textAlign="center";ctx.textBaseline="middle";
+    const label=Math.round(lightAng)+"° / "+Math.round(elev)+"°";
+    const ty=sy-22<10?sy+22: sy-22;
+    ctx.fillStyle="rgba(4,8,16,.72)";
+    const w=ctx.measureText(label).width+12;
+    ctx.fillRect(sx-w/2,ty-8,w,16);
+    ctx.fillStyle="rgba(255,236,180,.95)";
+    ctx.fillText(label,sx,ty);
+  }
+  ctx.restore();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UI
+   ═══════════════════════════════════════════════════════════════ */
+const $=id=>document.getElementById(id);
+const loader=$("loader"),loadtxt=$("loadtxt");
+let count=0,arch=[];
+
+function toast(msg){
+  const t=$("toast");t.textContent=msg;t.classList.add("on");
+  clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("on"),1900);
+}
+function fmt(n){
+  if(n>=1e6)return (n/1e6).toFixed(2)+" 万";
+  return n.toLocaleString("zh-CN");
+}
+
+let generating=false;
+async function generate(seedStr,opts){
+  if(generating)return;
+  const o=opts||{};
+  generating=true;
+  const btn=$("btnGen");btn.disabled=true;
+  loader.classList.add("on");
+  $("vptag").textContent="SCAN // 合成中";
+  loadtxt.textContent="正在合成星体… 0%";
+  await new Promise(r=>setTimeout(r,24));
+  const P=await createPlanet(seedStr,p=>{
+    loadtxt.textContent="正在合成星体… "+Math.round(p*100)+"%";
+  });
+  CUR=P;
+  /* 换分辨率重合成时保留自转相位与合成计数：画面不跳、计数不虚增 */
+  if(!o.keepPhase){phase=Math.random();cloudPhase=Math.random();}
+  drawBG();
+  updateInfo(P);
+  $("seedInput").value=seedStr;
+  if(!o.noCount){count++;$("cnt").textContent=count;}
+  $("vptag").textContent="SCAN // "+P.biome.en+" · "+P.name;
+  loader.classList.remove("on");
+  btn.disabled=false;generating=false;
+}
+
+/* 安全版生成：任何异常都不会让按钮永久卡死 */
+function safeGenerate(seedStr,opts){
+  generate(seedStr,opts).catch(err=>{
+    console.error(err);
+    loader.classList.remove("on");
+    $("btnGen").disabled=false;
+    generating=false;
+    toast("生成失败，已恢复操作");
+  });
+}
+
+function updateInfo(P){
+  const bm=P.biome,s=P.stats;
+  const tt=$("typetag");
+  tt.style.color=bm.color;
+  tt.querySelector("span").textContent=bm.name+" · "+bm.en+(P.sub?" · "+P.sub:"");
+  $("pname").textContent=P.name;
+  $("pepi").textContent=P.epi;
+  $("pseed").textContent=P.seed;
+  $("pdesc").textContent=describe(P);
+
+  const rows=[
+    ["直径 DIAMETER",fmt(s.dia)+" <small>km</small>"],
+    ["质量 MASS",s.mass<0.01?s.mass.toExponential(2):s.mass.toFixed(s.mass<10?2:1)+" <small>M⊕</small>"],
+    ["表面重力",s.grav.toFixed(2)+" <small>g</small>"],
+    ["平均温度",s.temp+" <small>°C</small>"],
+    ["自转周期",s.rot+" <small>h</small>"],
+    ["轨道周期",s.orb?s.orb+" <small>d</small>":"—"],
+    ["卫星数量",s.moons+" <small>颗</small>"]
+  ];
+  let html="";
+  for(const [k,v] of rows)html+='<div class="st"><div class="k">'+k+'</div><div class="v">'+v+"</div></div>";
+  html+='<div class="st wide"><div class="k">大气成分 ATMOSPHERE</div><div class="v" style="font-size:13px">'+s.atmos+"</div></div>";
+  html+='<div class="st wide"><div class="k">主要资源 RESOURCES</div><div class="v" style="font-size:13px">'+s.res.join(" · ")+"</div></div>";
+  $("stats").innerHTML=html;
+
+  $("habV").textContent=s.hab+" / 100 · "+habLabel(s.hab);
+  $("habBar").style.width=s.hab+"%";
+  $("hazV").textContent=hazLabel(s.haz);
+  $("hazBar").style.width=s.haz+"%";
+
+  const cls=["","",""];
+  $("traits").innerHTML=P.traits.map((t,i)=>{
+    const c=i%5===0?"gold":(i%3===0?"warn":(i%4===0?"good":""));
+    return '<span class="chip '+c+'">'+t+"</span>";
+  }).join("");
+}
+function describe(P){
+  const s=P.stats,bm=P.biome;
+  const parts=[];
+  parts.push("一颗"+bm.name+(P.sub?"（"+P.sub+"）":""));
+  if(s.dia>50000)parts.push("体积远超标准类地行星");
+  else if(s.dia<5000)parts.push("尺寸小于多数类地世界");
+  parts.push("地表平均温度 "+s.temp+"°C");
+  parts.push(s.atmos);
+  if(s.hab>60)parts.push("具备直接殖民潜力");
+  else if(s.hab>30)parts.push("需加压密闭设施方可驻留");
+  else parts.push("环境极端，仅适合无人探测");
+  parts.push("。");
+  return parts.join("，").replace("，，","，");
+}
+
+/* 档案 */
+function addArchive(P){
+  const c=document.createElement("canvas");c.width=112;c.height=112;
+  const x=c.getContext("2d");
+  const s=Math.min(CW,CH)*0.42;
+  /* 源矩形按画布内部像素取（逻辑尺寸 × OUT），否则输出倍率一高就只截到左上角 */
+  x.drawImage(cv,(CX-s)*OUT,(CY-s)*OUT,s*2*OUT,s*2*OUT,0,0,112,112);
+  arch.unshift({seed:P.seed,name:P.name,type:P.biome.name,color:P.biome.color,url:c.toDataURL("image/png")});
+  if(arch.length>24)arch.pop();
+  renderArch();
+}
+function renderArch(){
+  const el=$("arch");
+  if(!arch.length){el.innerHTML='<div class="empty">暂无记录</div>';return;}
+  el.innerHTML=arch.map((a,i)=>
+    '<div class="arc" data-i="'+i+'" title="'+a.name+" · "+a.type+"\nSEED: "+a.seed+'">'+
+    '<img src="'+a.url+'" alt="'+a.name+'"><span>'+a.name+"</span></div>").join("");
+  el.querySelectorAll(".arc").forEach(n=>{
+    n.onclick=()=>{const a=arch[+n.dataset.i];$("seedInput").value=a.seed;generate(a.seed);};
+  });
+}
+
+/* ── 亚型（细分形态）下拉 ── */
+function fillSubSel(tkey,keep){
+  const sub=$("subSel");
+  const bm=BIOMES[tkey];
+  if(!bm){
+    sub.innerHTML='<option value="">✦ 亚型随机（随大类）</option>';
+    sub.disabled=true;sub.title="先选择具体大类，才能指定亚型";
+    return;
+  }
+  sub.disabled=false;sub.title="指定该大类下的细分形态";
+  sub.innerHTML='<option value="">✦ 亚型随机</option>'+
+    bm.subs.map((s,i)=>'<option value="'+i+'">'+(i+1)+". "+s.name+"</option>").join("");
+  if(keep!=null&&keep!==undefined&&bm.subs[keep])sub.value=String(keep);
+}
+/* 当前 UI 上选中的亚型（null = 随机） */
+function curSubChoice(tkey){
+  const sub=$("subSel");
+  if(!tkey||sub.disabled||sub.value==="")return null;
+  const i=+sub.value;
+  return (BIOMES[tkey]&&BIOMES[tkey].subs[i])?i:null;
+}
+/* 光照拖拽 / 归位后把缩放数值同步回控件（光源与仰角已无滑块） */
+function syncLightUI(){
+  $("vZoom").textContent=zoom.toFixed(2);
+}
+
+/* 事件绑定 */
+function initUI(){
+  const sel=$("typeSel");
+  sel.innerHTML='<option value="">✦ 完全随机（加权）</option>'+
+    BIOME_KEYS.map(k=>'<option value="'+k+'">'+BIOMES[k].name+" · "+BIOMES[k].en+"</option>").join("");
+  fillSubSel(sel.value||null);
+  sel.onchange=()=>fillSubSel(sel.value||null);
+
+  /* 标签式面板切换 */
+  $("tabs").addEventListener("click",e=>{
+    const b=e.target.closest("button[data-tab]");if(!b)return;
+    const k=b.dataset.tab;
+    for(const n of $("tabs").children)n.classList.toggle("on",n===b);
+    for(const n of document.querySelectorAll(".tabpane"))n.classList.toggle("on",n.dataset.pane===k);
+  });
+
+  $("btnGen").onclick=()=>safeGenerate(newSeed(sel.value||null,curSubChoice(sel.value||null)));
+  $("btnReroll").onclick=()=>{
+    const t=(sel.value||(CUR?CUR.type:null));
+    if(!t)return safeGenerate(newSeed(null));
+    let sub=curSubChoice(t);
+    // 亚型为「随机」时，主动避开当前亚型，保证重掷一定换纹理而不是只换色
+    if(sub==null&&CUR&&CUR.type===t&&BIOMES[t].subs.length>1){
+      let i=CUR.subIndex,guard=0;
+      while(i===CUR.subIndex&&guard++<12)i=Math.floor(Math.random()*BIOMES[t].subs.length);
+      sub=i;
+    }
+    safeGenerate(newSeed(t,sub));
+  };
+  $("btnSeed").onclick=()=>{
+    const v=$("seedInput").value.trim();
+    if(!v){toast("请先输入种子");return;}
+    safeGenerate(v);
+  };
+  $("seedInput").addEventListener("keydown",e=>{if(e.key==="Enter")$("btnSeed").click();});
+
+  /* 星球分辨率：档位切换会立刻按同一颗星的种子重合成（不换星、不重置自转） */
+  const resSel=$("resSel");
+  resSel.innerHTML=RES_STEPS.map((r,i)=>
+    '<option value="'+i+'">画质 '+r.name+" "+r.k+"× · "+r.tex+"</option>").join("");
+  resSel.value=String(resIdx);
+  resSel.onchange=()=>setResolution(+resSel.value);
+
+  /* 暂停 / 继续：冻结自转与卫星公转（星点闪烁保持，画面不僵死） */
+  $("btnPause").onclick=e=>{
+    paused=!paused;
+    e.target.textContent=paused?"▶":"⏸";
+    e.target.title=paused?"继续":"暂停";
+    e.target.classList.toggle("on",paused);
+  };
+  /* 光照归位：方位角与仰角回到出厂值（拖动改过的取景角度一键还原） */
+  $("btnLightReset").onclick=()=>{
+    lightAng=LIGHT_DEF;elev=ELEV_DEF;
+    syncLightUI();
+    toast("光照已归位 · "+LIGHT_DEF+"° / "+ELEV_DEF+"°");
+  };
+  $("btnSave").onclick=()=>{if(CUR){addArchive(CUR);toast("已存入观测档案");}};
+  $("btnPng").onclick=()=>{
+    if(!CUR)return;
+    cv.toBlob(b=>{
+      const a=document.createElement("a");
+      a.href=URL.createObjectURL(b);
+      a.download=CUR.name.replace(/[^\w\-]+/g,"_")+"_"+CUR.seed+".png";
+      a.click();setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+      toast("已导出 PNG");
+    });
+  };
+  /* 缩放：预览窗内 ＋ / － 与桌面滚轮共用同一条缩放路径。
+     上限放到 2.4 倍（画布 900×640 内行星可超出视野），按钮步进 12% 便于快速到位 */
+  const setZoom=z=>{
+    zoom=clamp(z,0.6,2.4);
+    $("vZoom").textContent=zoom.toFixed(2);
+  };
+  $("btnZoomIn").onclick=()=>setZoom(zoom*1.12);
+  $("btnZoomOut").onclick=()=>setZoom(zoom/1.12);
+
+  /* 画布交互：拖动采用「相对位移」而不是绝对坐标，
+     横向 1 屏宽 ≈ 方位角 300°、纵向 1 屏高 ≈ 仰角 110°，手感线性可预期 */
+  let drag=false,sx=0,sy=0,sAng=0,sEl=0;
+  const endDrag=()=>{if(!drag)return;drag=false;dragLight=false;cv.style.cursor="grab";};
+  cv.addEventListener("pointerdown",e=>{
+    drag=true;dragLight=true;
+    cv.setPointerCapture(e.pointerId);
+    sx=e.clientX;sy=e.clientY;sAng=lightAng;sEl=elev;
+    cv.style.cursor="grabbing";
+  });
+  cv.addEventListener("pointerup",endDrag);
+  cv.addEventListener("pointercancel",endDrag);
+  cv.addEventListener("pointermove",e=>{
+    if(!drag)return;
+    const r=cv.getBoundingClientRect();
+    if(!r.width||!r.height)return;
+    const dx=(e.clientX-sx)/r.width,dy=(e.clientY-sy)/r.height;
+    lightAng=wrapDeg(sAng+dx*300);
+    elev=clamp(sEl-dy*110,-60,70);
+    syncLightUI();
+  });
+  cv.addEventListener("wheel",e=>{
+    e.preventDefault();
+    setZoom(zoom*(e.deltaY>0?0.94:1.06));
+  },{passive:false});
+  cv.addEventListener("dblclick",()=>$("btnPause").click());
+
+  $("pseed").onclick=()=>{
+    const t=$("pseed").textContent;
+    navigator.clipboard?.writeText(t).then(()=>toast("种子已复制："+t),()=>toast("种子："+t));
+  };
+
+  /* 手机端（竖屏 / 矮屏横屏）：高频操作按钮条从顶栏搬到预览窗正下方，
+     让「同型重掷 / 随机生成新星」落进拇指区；「存入档案 / 导出 PNG」留在右上角。
+     两套版式共用同一批按钮，不复制 DOM、不重复绑事件 */
+  const mqMobile=matchMedia(
+    "(max-width:800px) and (orientation:portrait), (orientation:landscape) and (max-height:560px)");
+  const placeTools=()=>{
+    const t=$("tools"),op=$("oprow"),bar=document.querySelector("header.topbar");
+    if(!t||!op||!bar)return;
+    if(mqMobile.matches){ if(t.parentElement!==op)op.appendChild(t); }
+    else if(t.parentElement!==bar)bar.insertBefore(t,$("toolright"));
+  };
+  placeTools();
+  mqMobile.addEventListener("change",placeTools);
+}
+
+/* 启动 */
+initUI();
+applyCanvasSize();
+requestAnimationFrame(frame);
+generate(newSeed());
+</script>
+</body>
+</html>
